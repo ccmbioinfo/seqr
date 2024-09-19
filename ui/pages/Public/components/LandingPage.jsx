@@ -8,7 +8,7 @@ import { Segment, Header, Grid, Button, List } from 'semantic-ui-react'
 import { getGoogleLoginEnabled } from 'redux/selectors'
 import { VerticalSpacer } from 'shared/components/Spacers'
 import { SeqrPaperLink } from 'shared/components/page/Footer'
-import { LOCAL_LOGIN_URL, GOOGLE_LOGIN_URL } from 'shared/utils/constants'
+import { LOCAL_LOGIN_URL, GOOGLE_LOGIN_URL, LOCAL_REGISTER_URL } from 'shared/utils/constants'
 
 const PageSegment = styled(Segment).attrs({ padded: 'very' })`
   padding-left: 20% !important;
@@ -23,6 +23,10 @@ const LOGIN_BUTTON_PROPS = {
   label: 'Already a seqr user?', content: 'Sign In', primary: true, size: 'big', labelPosition: 'left',
 }
 
+const REGISTER_BUTTON_PROPS = {
+  label: 'Don\'t have an account?', content: 'Sign Up', primary: true, size: 'big', labelPosition: 'left',
+}
+
 const LandingPage = ({ googleLoginEnabled }) => (
   <Segment.Group>
     <PageSegment textAlign="center" size="massive" secondary>
@@ -33,6 +37,8 @@ const LandingPage = ({ googleLoginEnabled }) => (
       {googleLoginEnabled ?
         <Button as="a" href={GOOGLE_LOGIN_URL} {...LOGIN_BUTTON_PROPS} /> :
         <Button as={Link} to={LOCAL_LOGIN_URL} {...LOGIN_BUTTON_PROPS} />}
+      <VerticalSpacer height={10} />
+      <Button as={Link} to={LOCAL_REGISTER_URL} {...REGISTER_BUTTON_PROPS} />
     </PageSegment>
     <Segment padded>
       <Grid columns="equal">

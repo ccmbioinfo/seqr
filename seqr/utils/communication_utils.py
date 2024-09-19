@@ -1,7 +1,9 @@
 import logging
+from requests.utils import quote
 from slacker import Slacker
 from settings import SLACK_TOKEN, BASE_URL, ANVIL_UI_URL
 from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
 from seqr.views.utils.terra_api_utils import anvil_enabled
@@ -35,7 +37,7 @@ def send_welcome_email(user, referrer):
         )
         setup_message += ' Once you are registered in AnVIL, you will be able to access seqr at {}'.format(BASE_URL)
     else:
-        setup_message = 'Please click this link to set up your account:\n    {}login/set_password/{}'.format(
+        setup_message = 'Please click this link to set up your account:\n    {}/login/set_password/{}'.format(
             BASE_URL, user.password)
 
     email_content = """
@@ -61,3 +63,15 @@ def send_html_email(email_body, **kwargs):
     )
     email_message.attach_alternative(email_body, 'text/html')
     email_message.send()
+
+
+def send_reset_password_email(user):
+    subject = 'seqr: Reset your password'
+    to = user.email
+    email_body = render_to_string('emails/reset_password.html', {
+        'base_url': BASE_URL,
+        'full_name': user.get_full_name(),
+        'password_token': quote(user.password, safe='')
+    })
+
+    send_html_email(email_body, subject=subject, to=[to])

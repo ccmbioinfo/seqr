@@ -14,6 +14,7 @@ import DataManagement from 'pages/DataManagement/DataManagement'
 import Report from 'pages/Report/Report'
 import SummaryData from 'pages/SummaryData/SummaryData'
 import Login from 'pages/Login/Login'
+import Register from 'pages/Register/Register'
 import AcceptPolicies from 'pages/Login/components/AcceptPolicies'
 import PUBLIC_ROUTES from 'pages/Public/PublicRoutes'
 import LandingPage from 'pages/Public/components/LandingPage'
@@ -54,6 +55,7 @@ ReactDOM.render(
           <Route path="/report" component={Report} />
           <Route path="/summary_data" component={SummaryData} />
           <Route path="/login" component={Login} />
+          <Route path="/register" component={Register} />
           <Route path="/accept_policies" component={AcceptPolicies} />
           <React.Suspense fallback={<Loader />}>
             {PUBLIC_ROUTES.map(props => <Route key={props.path} {...props} />)}

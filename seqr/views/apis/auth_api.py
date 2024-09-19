@@ -48,6 +48,50 @@ def login_view(request):
 
     return create_json_response({'success': True})
 
+def register_view(request):
+    request_json = json.loads(request.body)
+    if not request_json.get('username'):
+        error = 'Username is required'
+        return create_json_response({'error': error}, status=400, reason=error)
+    if not request_json.get('first_name'):
+        error = 'First name is required'
+        return create_json_response({'error': error}, status=400, reason=error)
+    if not request_json.get('last_name'):
+        error = 'Last name is required'
+        return create_json_response({'error': error}, status=400, reason=error)
+    if not request_json.get('email'):
+        error = 'Email is required'
+        return create_json_response({'error': error}, status=400, reason=error)
+    if not request_json.get('password'):
+        error = 'Password is required'
+        return create_json_response({'error': error}, status=400, reason=error)
+
+    if User.objects.filter(username=request_json.get('username')).exists():
+        error = 'Username already in use'
+        return create_json_response({'error': error}, status=400, reason=error)
+
+    users = User.objects.annotate(email_lower=Lower('email')).filter(email_lower=request_json['email'].lower())
+    if users.count() != 0:
+        error = 'Email address already in use'
+        return create_json_response({'error': error}, status=400, reason=error)
+
+    user = User.objects.create_user(
+        username=request_json.get('username'),
+        email=request_json.get('email'),
+        password=request_json.get('password')
+    )
+    user.first_name = request_json.get('first_name')
+    user.last_name = request_json.get('last_name')
+    user.save()
+
+    u = authenticate(
+        username=request_json.get('username'),
+        password=request_json['password']
+    )
+    login(request, u)
+    logger.info('Logged in {}'.format(u.email), u)
+
+    return create_json_response({'success': True})
 
 @login_required(login_url='/', redirect_field_name=None)
 def logout_view(request):

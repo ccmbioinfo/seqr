@@ -124,7 +124,7 @@ from seqr.views.apis.summary_data_api import success_story, saved_variants_page,
 from seqr.views.apis.superuser_api import get_all_users
 
 from seqr.views.apis.awesomebar_api import awesomebar_autocomplete_handler
-from seqr.views.apis.auth_api import login_required_error, login_view, logout_view, policies_required_error
+from seqr.views.apis.auth_api import login_required_error, login_view, logout_view, policies_required_error, register_view
 from seqr.views.apis.igv_api import fetch_igv_track, receive_igv_table_handler, update_individual_igv_sample, \
     igv_genomes_proxy
 from seqr.views.apis.analysis_group_api import update_analysis_group_handler, delete_analysis_group_handler
@@ -159,6 +159,7 @@ no_login_react_app_pages = [
     'matchmaker/matchbox',
     'matchmaker/disclaimer',
     'privacy_policy',
+    'register/',
     'terms_of_service',
 
 ]
@@ -273,6 +274,7 @@ api_endpoints = {
     'matchmaker/update_project_contact/(?P<project_guid>[^/]+)': update_mme_project_contact,
 
     'login': login_view,
+    'register': register_view,
     'users/forgot_password': forgot_password,
     'users/(?P<username>[^/]+)/set_password': set_password,
     'users/update': update_user,

@@ -21,6 +21,8 @@ const Login = ({ onSubmit }) => (
       submitButtonText="Log In"
     />
     <Link to="/login/forgot_password">Forgot Password?</Link>
+    <br />
+    <Link to="/register">Don&apos;t Have an Account?</Link>
   </UserFormContainer>
 )
 

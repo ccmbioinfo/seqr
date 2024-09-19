@@ -8,3 +8,10 @@ deploy/*
 .git
 .vscode
 .idea
+
+data/
+gunicorn/
+logs/
+!logs/django/
+nginx/
+scripts/

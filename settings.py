@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'matchmaker',
     'social_django',
     'panelapp',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
@@ -153,34 +154,45 @@ LOGGING = {
         },
     },
     'handlers': {
+        'access_log': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': '/var/log/django/access.log'
+        },
         'console_json': {
-            'level': 'INFO',
+            'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'json_log_formatter',
+        },
+        'debug_log': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': '/var/log/django/debug.log'
         },
         'null': {
             'class': 'logging.NullHandler',
         },
+        'server_log': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': '/var/log/django/server.log'
+        },
     },
     'loggers': {
-        # By default, log to console as json. Gunicorn will forward console logs to kubernetes and stackdriver
         '': {
-            'handlers': ['console_json'],
-            'level': 'INFO',
-            'propagate': True,
-        },
-        # Disable default server logging since we use custom request logging middlewear
-        'django.server': {
-            'handlers': ['null'],
+            'handlers': ['debug_log', 'console_json'],
             'propagate': False,
         },
-        # Log all other django logs to console as json
         'django': {
-            'handlers': ['console_json'],
-            'level': 'INFO',
+            'handlers': ['debug_log', 'console_json'],
+            'propagate': False,
         },
         'django.request': {
-            'handlers': ['console_json'],
+            'handlers': ['access_log', 'console_json'],
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['server_log', 'console_json'],
             'propagate': False,
         },
     }
@@ -229,12 +241,10 @@ WSGI_APPLICATION = 'wsgi.application'
 WHITENOISE_ALLOW_ALL_ORIGINS = False
 
 # Email settings
-EMAIL_BACKEND = "anymail.backends.postmark.EmailBackend"
-DEFAULT_FROM_EMAIL = "seqr@broadinstitute.org"
-
-ANYMAIL = {
-    "POSTMARK_SERVER_TOKEN": os.environ.get('POSTMARK_SERVER_TOKEN', 'postmark-server-token-placeholder'),
-}
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "mailrelay.research.sickkids.ca"
+DEFAULT_FROM_EMAIL = "CCM seqr <noreply@seqr.ccm.sickkids.ca>"
+SERVER_EMAIL = "noreply@seqr.ccm.sickkids.ca"
 
 TEMPLATE_DIRS = [
     os.path.join(BASE_DIR, 'ui/dist'),

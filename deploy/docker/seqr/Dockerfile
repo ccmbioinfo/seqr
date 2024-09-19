@@ -86,6 +86,7 @@ COPY --from=build /build/ui/dist /seqr/ui/dist
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
+COPY logs/django /var/log/django
 RUN ./manage.py collectstatic --no-input
 
 EXPOSE 8000

@@ -19,6 +19,7 @@ import { ColoredIcon } from '../components/StyledComponents'
 export const ANVIL_URL = 'https://anvil.terra.bio'
 export const GOOGLE_LOGIN_URL = '/login/google-oauth2'
 export const LOCAL_LOGIN_URL = '/login'
+export const LOCAL_REGISTER_URL = '/register'
 
 export const GENOME_VERSION_37 = '37'
 export const GENOME_VERSION_38 = '38'

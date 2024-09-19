@@ -15,7 +15,6 @@ services:
       timeout: 10s
       retries: 100
 
-
   redis:
     image: gcr.io/seqr-project/redis:gcloud-prod
     healthcheck:
@@ -24,11 +23,10 @@ services:
       timeout: 5s
       retries: 100
 
-
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.16.3
     volumes:
-      - ./data/elasticsearch:/usr/share/elasticsearch/data
+      - /mnt/hpf/data/elasticsearch:/usr/share/elasticsearch/data
     container_name: elasticsearch
     environment:
       - http.host=0.0.0.0
@@ -42,28 +40,34 @@ services:
     ports:
       - 9200:9200
 
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:7.16.3
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    healthcheck:
-      test: bash -c "curl -s kibana:5601 | grep kibana"
-      interval: 3s
-      timeout: 5s
-      retries: 100
+#  kibana:
+#    image: docker.elastic.co/kibana/kibana:7.16.3
+#    environment:
+#      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+#    depends_on:
+#      elasticsearch:
+#        condition: service_healthy
+#    healthcheck:
+#      test: bash -c "curl -s kibana:5601 | grep kibana"
+#      interval: 3s
+#      timeout: 5s
+#      retries: 100
 
   seqr:
-    image: gcr.io/seqr-project/seqr:gcloud-prod
+    build: .
+    image: ccm-seqr:dev
     volumes:
-    - ./data/readviz:/readviz
-    - ./data/seqr_static_files:/seqr_static_files
+      - /mnt/hpf/bam_files:/readviz
+      # - ./data/readviz:/readviz
+      - /mnt/hpf/data/seqr_static_files:/seqr_static_files
+      - ./settings.py:/seqr/settings.py
+      - ./gunicorn/gunicorn_config.py:/seqr/gunicorn_config.py
+      - ./logs/django:/var/log/django
+      - ./logs/gunicorn:/var/log/gunicorn
     ports:
-      - 80:8000
+      - 8000:8000
     environment:
+      - BASE_URL=https://seqr.ccm.sickkids.ca
       - SEQR_GIT_BRANCH=dev
       - PYTHONPATH=/seqr
       - STATIC_MEDIA_DIR=/seqr_static_files
@@ -77,6 +81,7 @@ services:
       - PGPORT=5433
       - PGUSER=postgres
       - GUNICORN_WORKER_THREADS=4
+      - ANALYST_USER_GROUP=analyst
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,15 +92,33 @@ services:
     healthcheck:
       test: bash -c "curl -s 'http://localhost:8000' | grep html"
 
-
   pipeline-runner:
-    image: gcr.io/seqr-project/pipeline-runner:gcloud-prod
+    image: gcr.io/seqr-project/pipeline-runner:20220526_130649
     volumes:
-      - ./data/seqr-reference-data:/seqr-reference-data
-      - ./data/vep_data:/vep_data
-      - ./data/input_vcfs:/input_vcfs
+      - /mnt/hpf/data/seqr-reference-data:/seqr-reference-data
+      - /mnt/hpf/data/vep_data:/vep_data
+      - /mnt/hpf/data/input_vcfs:/input_vcfs
+      - ./pipeline_runner/download_reference_data.sh:/usr/local/bin/download_reference_data.sh
+      - ./pipeline_runner/ensembl-vep-release-104:/ensembl-vep-release-104
+      - ./pipeline_runner/entrypoint.sh:/entrypoint.sh
+      - ./pipeline_runner/update_clinvar_matrix_table.sh:/usr/local/bin/update_clinvar_matrix_table.sh
+      - ./pipeline_runner/update_combined_reference_data.sh:/usr/local/bin/update_combined_reference_data.sh
+      - ./pipeline_runner/vep_configs/vep-GRCh37-loftee.json:/vep_configs/vep-GRCh37-loftee.json
+      - ./pipeline_runner/vep_configs/vep-GRCh38-loftee.json:/vep_configs/vep-GRCh38-loftee.json
       - ~/.config:/root/.config
     depends_on:
       elasticsearch:
         condition: service_healthy
 
+  nginx:
+    image: nginx
+    ports:
+      - 80:80
+      - 443:443
+    depends_on:
+      seqr:
+        condition: service_healthy
+    volumes:
+      - ./nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/certs:/etc/nginx/certs
+      - ./logs/nginx:/var/log/nginx
