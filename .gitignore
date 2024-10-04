@@ -28,6 +28,6 @@ pipeline-logs
 sql-dumps
 
 .vscode/
-pipeline_runner/
+# pipeline_runner/
 pipeline_runner/*/.github
 */*.zip
