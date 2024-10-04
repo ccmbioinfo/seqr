@@ -21,7 +21,7 @@ django_key
 
 data/*
 
-hail-elasticsearch-pipelines
+# hail-elasticsearch-pipelines
 nginx/certs/*
 !nginx/certs/.gitkeep
 pipeline-logs
@@ -29,3 +29,5 @@ sql-dumps
 
 .vscode/
 pipeline_runner/
+pipeline_runner/*/.github
+*/*.zip
