@@ -28,6 +28,31 @@ export const validators = {
   requiredEmail: value => (
     /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i.test(value) ? undefined : 'Invalid email address'
   ),
+  requiredPassword: (value) => {
+    if (!value) {
+      return 'Required'
+    }
+
+    const errors = []
+
+    if (value.length <= 7) {
+      errors.push('Password must be at least 8 characters')
+    }
+    if (!/\d/.test(value)) {
+      errors.push('Password must contain at least one number')
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(value)) {
+      errors.push('Password must contain at least one special character')
+    }
+    if (!/[A-Z]/.test(value)) {
+      errors.push('Password must contain at least one uppercase letter')
+    }
+    if (!/[a-z]/.test(value)) {
+      errors.push('Password must contain at least one lowercase letter')
+    }
+
+    return errors.length > 0 ? errors : undefined
+  },
 }
 
 const renderField = (props) => {

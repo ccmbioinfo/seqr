@@ -207,7 +207,7 @@ class FormWrapper extends React.PureComponent {
     const saveErrorMessage = errorMessages?.join('; ') || (currentFormSubmitFailed ? 'Error' : null)
 
     return [
-      showErrorPanel && errorMessages && <MessagePanel key="errorPanel" error visible list={errorMessages} />,
+      showErrorPanel && errorMessages && <MessagePanel key={`errorPanel-${errorMessages?.join('-')}`} error visible list={errorMessages} />,
       submitSucceeded && successMessage && <MessagePanel key="infoPanel" success visible content={successMessage} />,
       !submitOnChange && (
         <ButtonPanel
