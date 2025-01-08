@@ -94,6 +94,9 @@ services:
 
   pipeline-runner:
     image: gcr.io/seqr-project/pipeline-runner:20220526_130649
+    environment:
+      - GRCH37_TO_GRCH38_LIFTOVER_REF_PATH=/liftOver/grch37_to_grch38.over.chain.gz
+      - GRCH38_TO_GRCH37_LIFTOVER_REF_PATH=/liftOver/grch38_to_grch37.over.chain.gz
     volumes:
       - /mnt/hpf/data/seqr-reference-data:/seqr-reference-data
       - /mnt/hpf/data/vep_data:/vep_data
@@ -106,6 +109,7 @@ services:
       - ./pipeline_runner/vep_configs/vep-GRCh37-loftee.json:/vep_configs/vep-GRCh37-loftee.json
       - ./pipeline_runner/vep_configs/vep-GRCh38-loftee.json:/vep_configs/vep-GRCh38-loftee.json
       - ~/.config:/root/.config
+      - ./liftOver:/liftOver
     depends_on:
       elasticsearch:
         condition: service_healthy
