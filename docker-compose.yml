@@ -95,7 +95,9 @@ services:
   pipeline-runner:
     image: gcr.io/seqr-project/pipeline-runner:gcloud-prod
     environment:
+      # Fetched using `gsutil cpgs://hail-common/references/grch37_to_grch38.over.chain.gz` inside container
       - GRCH37_TO_GRCH38_LIFTOVER_REF_PATH=/liftOver/grch37_to_grch38.over.chain.gz
+      # Fetched using `gsutil cpgs://hail-common/references/grch38_to_grch37.over.chain.gz` inside container
       - GRCH38_TO_GRCH37_LIFTOVER_REF_PATH=/liftOver/grch38_to_grch37.over.chain.gz
     volumes:
       - /mnt/hpf/data/seqr-reference-data:/seqr-reference-data
@@ -109,6 +111,7 @@ services:
       - ./pipeline_runner/vep_configs/vep-GRCh37-loftee.json:/vep_configs/vep-GRCh37-loftee.json
       - ./pipeline_runner/vep_configs/vep-GRCh38-loftee.json:/vep_configs/vep-GRCh38-loftee.json
       - ~/.config:/root/.config
+      # Stores liftover chain files mentioned above
       - ./liftOver:/liftOver
     depends_on:
       elasticsearch:
