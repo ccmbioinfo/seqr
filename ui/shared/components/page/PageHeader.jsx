@@ -32,7 +32,7 @@ const mapGeneStateToProps = (state, ownProps) => ({
 export const GenePageHeader = connect(mapGeneStateToProps)(BaseGenePageHeader)
 
 const NO_HEADER_PAGES = [
-  '/dashboard', '/create_project_from_workspace', '/workspace', '/users', '/login', 
+  '/dashboard', '/create_project_from_workspace', '/workspace', '/users', '/login',
   '/register', '/accept_policies', ...PUBLIC_PAGES,
 ]
 
