@@ -4,15 +4,15 @@ import { Route, Switch } from 'react-router-dom'
 import { Grid } from 'semantic-ui-react'
 
 import { Error404 } from 'shared/components/page/Errors'
-import VariantSearchForm from './components/VariantSearchForm'
+import VariantSearchForm, { NoEditProjectsVariantSearchForm } from './components/VariantSearchForm'
 import VariantSearchResults from './components/VariantSearchResults'
 
 const RESULTS_PATH = 'results/:searchHash'
 const SINGLE_VARIANT_RESULTS_PATH = 'variant/:variantId/family/:familyGuid'
 
 const SEARCH_FORM_PAGES = [
+  'project/:projectGuid/analysis_group/:analysisGroupGuid',
   'project/:projectGuid',
-  'analysis_group/:analysisGroupGuid',
   'family/:familyGuid',
   RESULTS_PATH,
 ]
@@ -28,6 +28,7 @@ const VariantSearch = ({ match }) => (
       <Grid.Column width={16}>
         <Switch>
           <Route path={SEARCH_FORM_PAGES.map(pagePath => `${match.url}/${pagePath}`)} component={VariantSearchForm} />
+          <Route path={`${match.url}/families/:familiesHash`} component={NoEditProjectsVariantSearchForm} />
           <Route path={`${match.url}/${SINGLE_VARIANT_RESULTS_PATH}`} />
           <Route path={match.url} exact component={VariantSearchForm} />
           <Route component={Error404} />

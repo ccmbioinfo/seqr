@@ -4,6 +4,15 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
+from reference_data.management.commands.utils.update_utils import ReferenceDataHandler
+from reference_data.management.commands.update_dbnsfp_gene import DbNSFPReferenceDataHandler
+from reference_data.management.commands.update_gene_constraint import GeneConstraintReferenceDataHandler
+from reference_data.management.commands.update_gene_cn_sensitivity import CNSensitivityReferenceDataHandler
+from reference_data.management.commands.update_gencc import GenCCReferenceDataHandler
+from reference_data.management.commands.update_clingen import ClinGenReferenceDataHandler
+from reference_data.management.commands.update_refseq import RefseqReferenceDataHandler
+from reference_data.models import GeneInfo
+
 
 def omim_exception(omim_key):
     raise Exception('Omim exception, key: '+omim_key)
@@ -18,7 +27,7 @@ def mgi_exception():
 
 SKIP_ARGS = [
     '--skip-gencode', '--skip-dbnsfp-gene', '--skip-gene-constraint', '--skip-primate-ai', '--skip-mgi', '--skip-hpo',
-    '--skip-gene-cn-sensitivity', '--skip-gencc', '--skip-clingen',
+    '--skip-gene-cn-sensitivity', '--skip-gencc', '--skip-clingen', '--skip-refseq',
 ]
 
 class UpdateAllReferenceDataTest(TestCase):
@@ -26,19 +35,14 @@ class UpdateAllReferenceDataTest(TestCase):
     fixtures = ['users', 'reference_data']
 
     def setUp(self):
-        patcher = mock.patch('reference_data.management.commands.update_dbnsfp_gene.DbNSFPReferenceDataHandler', lambda: 'dbnsfp_gene')
+        self.mock_handlers = []
+        def _mock_init_handler(_self, **kwargs):
+            self.mock_handlers.append(type(_self))
+            return None
+        patcher = mock.patch.object(ReferenceDataHandler, '__init__', _mock_init_handler)
         patcher.start()
         self.addCleanup(patcher.stop)
-        patcher = mock.patch('reference_data.management.commands.update_gene_cn_sensitivity.CNSensitivityReferenceDataHandler', lambda: 'gene_cn_sensitivity')
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('reference_data.management.commands.update_gene_constraint.GeneConstraintReferenceDataHandler', lambda: 'gene_constraint')
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('reference_data.management.commands.update_gencc.GenCCReferenceDataHandler', lambda: 'gencc')
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        patcher = mock.patch('reference_data.management.commands.update_clingen.ClinGenReferenceDataHandler', lambda: 'clingen')
+        patcher = mock.patch.object(RefseqReferenceDataHandler, '__init__', _mock_init_handler)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -61,7 +65,7 @@ class UpdateAllReferenceDataTest(TestCase):
         patcher = mock.patch('reference_data.management.commands.update_all_reference_data.update_hpo')
         self.mock_update_hpo = patcher.start()
         self.addCleanup(patcher.stop)
-        patcher = mock.patch('reference_data.management.commands.update_all_reference_data.update_records')
+        patcher = mock.patch.object(ReferenceDataHandler, 'update_records')
         self.mock_update_records = patcher.start()
         self.addCleanup(patcher.stop)
         patcher = mock.patch('reference_data.management.commands.update_all_reference_data.logger')
@@ -75,12 +79,20 @@ class UpdateAllReferenceDataTest(TestCase):
             call_command('update_all_reference_data')
         self.assertEqual(str(err.exception), 'Error: one of the arguments --omim-key --use-cached-omim --skip-omim is required')
 
+        # Test update is skipped when data is already loaded
+        self.mock_update_gencode.assert_not_called()
+        self.mock_omim.assert_not_called()
+        self.mock_cached_omim.assert_not_called()
+        self.mock_update_records.assert_not_called()
+        self.mock_update_hpo.assert_not_called()
+
         # Test update all gencode, no skips, fail primate_ai and mgi
-        self.mock_omim.return_value = 'omim'
+        GeneInfo.objects.all().delete()
         call_command('update_all_reference_data', '--omim-key=test_key')
 
         calls = [
-            mock.call(31, reset=True),
+            mock.call(39, reset=True),
+            mock.call(31),
             mock.call(29),
             mock.call(28),
             mock.call(27),
@@ -90,23 +102,22 @@ class UpdateAllReferenceDataTest(TestCase):
 
         self.mock_omim.assert_called_with('test_key')
         self.mock_cached_omim.assert_not_called()
-
+        self.mock_omim.return_value.update_records.assert_called_with()
         self.assertEqual(self.mock_update_records.call_count, 6)
-        calls = [
-            mock.call('omim'),
-            mock.call('dbnsfp_gene'),
-            mock.call('gene_constraint'),
-            mock.call('gene_cn_sensitivity'),
-            mock.call('gencc'),
-            mock.call('clingen'),
-        ]
-        self.mock_update_records.assert_has_calls(calls)
+        self.assertListEqual(self.mock_handlers, [
+            DbNSFPReferenceDataHandler,
+            GeneConstraintReferenceDataHandler,
+            CNSensitivityReferenceDataHandler,
+            GenCCReferenceDataHandler,
+            ClinGenReferenceDataHandler,
+            RefseqReferenceDataHandler,
+        ])
 
         self.mock_update_hpo.assert_called_with()
 
         calls = [
             mock.call('Done'),
-            mock.call('Updated: gencode, omim, dbnsfp_gene, gene_constraint, gene_cn_sensitivity, gencc, clingen, hpo'),
+            mock.call('Updated: gencode, omim, dbnsfp_gene, gene_constraint, gene_cn_sensitivity, gencc, clingen, refseq, hpo'),
             mock.call('Failed to Update: primate_ai, mgi')
         ]
         self.mock_logger.info.assert_has_calls(calls)
@@ -129,13 +140,12 @@ class UpdateAllReferenceDataTest(TestCase):
         self.mock_logger.info.assert_called_with("Done")
 
     def test_cached_omim_update_reference_data_command(self):
-        self.mock_cached_omim.return_value = 'cached_omim'
-
         call_command(
             'update_all_reference_data', '--use-cached-omim', *SKIP_ARGS)
 
         self.mock_cached_omim.assert_called_with()
-        self.mock_update_records.assert_called_with('cached_omim')
+        self.mock_cached_omim.return_value.update_records.assert_called_with()
+        self.mock_update_records.assert_not_called()
 
         self.mock_omim.assert_not_called()
         self.mock_update_gencode.assert_not_called()

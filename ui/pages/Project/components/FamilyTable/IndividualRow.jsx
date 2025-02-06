@@ -7,7 +7,9 @@ import { Field } from 'react-final-form'
 import { Label, Popup, Form, Input, Loader } from 'semantic-ui-react'
 import orderBy from 'lodash/orderBy'
 
-import { SearchInput, YearSelector, RadioButtonGroup } from 'shared/components/form/Inputs'
+import { SearchInput, YearSelector, RadioButtonGroup, ButtonRadioGroup, Select } from 'shared/components/form/Inputs'
+import { validators } from 'shared/components/form/FormHelpers'
+import LoadOptionsSelect from 'shared/components/form/LoadOptionsSelect'
 import PedigreeIcon from 'shared/components/icons/PedigreeIcon'
 import Modal from 'shared/components/modal/Modal'
 import { AwesomeBarFormInput } from 'shared/components/page/AwesomeBar'
@@ -21,21 +23,28 @@ import Sample from 'shared/components/panel/sample'
 import FamilyLayout from 'shared/components/panel/family/FamilyLayout'
 import { ColoredIcon, ButtonLink } from 'shared/components/StyledComponents'
 import { VerticalSpacer } from 'shared/components/Spacers'
-import { AFFECTED, PROBAND_RELATIONSHIP_OPTIONS, SAMPLE_TYPE_RNA } from 'shared/utils/constants'
+import {
+  AFFECTED, PROBAND_RELATIONSHIP_OPTIONS, INDIVIDUAL_FIELD_CONFIGS, INDIVIDUAL_FIELD_SEX,
+  INDIVIDUAL_FIELD_AFFECTED, INDIVIDUAL_FIELD_FEATURES, INDIVIDUAL_FIELD_LOOKUP, DATASET_TITLE_LOOKUP,
+  DATA_TYPE_EXPRESSION_OUTLIER, DATA_TYPE_SPLICE_OUTLIER, INDIVIDUAL_FIELD_ANALYTE_TYPE,
+  INDIVIDUAL_FIELD_TISSUE_AFFECTED, INDIVIDUAL_FIELD_PRIMARY_BIOSAMPLE,
+} from 'shared/utils/constants'
+import { snakecaseToTitlecase } from 'shared/utils/stringUtils'
 
 import { updateIndividual } from 'redux/rootReducer'
-import { getSamplesByGuid, getMmeSubmissionsByGuid } from 'redux/selectors'
-import { snakecaseToTitlecase } from 'shared/utils/stringUtils'
-import { HPO_FIELD_RENDER } from '../HpoTerms'
+import { getSamplesByGuid, getMmeSubmissionsByGuid, getIGVSamplesByFamilySampleIndividual } from 'redux/selectors'
+import { HPO_FORM_FIELDS } from '../HpoTerms'
 import {
   CASE_REVIEW_STATUS_MORE_INFO_NEEDED, CASE_REVIEW_STATUS_OPTIONS, CASE_REVIEW_TABLE_NAME, INDIVIDUAL_DETAIL_FIELDS,
   ONSET_AGE_OPTIONS, INHERITANCE_MODE_OPTIONS, INHERITANCE_MODE_LOOKUP, AR_FIELDS,
 } from '../../constants'
-import { getCurrentProject } from '../../selectors'
+import { updateIndividuals, updateIndividualIGV } from '../../reducers'
+import { getCurrentProject, getParentOptionsByIndividual } from '../../selectors'
 
 import CaseReviewStatusDropdown from './CaseReviewStatusDropdown'
+import CollapsableLayout from './CollapsableLayout'
 
-const RnaSeqOutliers = React.lazy(() => import('../RnaSeqOutliers'))
+const PhenotypePrioritizedGenes = React.lazy(() => import('../PhenotypePrioritizedGenes'))
 
 const Detail = styled.div`
   display: inline-block;
@@ -47,15 +56,25 @@ const Detail = styled.div`
 
 const CaseReviewDropdownContainer = styled.div`
   float: right;
-  width: 220px;
+  width: 100%;
 `
 
-const FLAG_TITLE = {
-  chimera: '% Chimera',
-  contamination: '% Contamination',
-  coverage_exome: '% 20X Coverage',
-  coverage_genome: 'Mean Coverage',
-}
+const IndividualContainer = styled.div`
+ display: inline-block;
+`
+
+const PaddedRadioButtonGroup = styled(RadioButtonGroup)`
+  padding: 10px;
+  
+  .button {
+    padding-left: 1em !important;
+    padding-right: 1em !important;
+    
+    &.labeled .label {
+      margin-left: 0px !important;
+    }
+  }
+`
 
 const POPULATION_MAP = {
   AFR: 'African',
@@ -67,6 +86,8 @@ const POPULATION_MAP = {
   NFE: 'European (non-Finnish)',
   OTH: 'Other',
   SAS: 'South Asian',
+  AmInd: 'American Indian',
+  PaIsl: 'Pacific Islander',
 }
 
 const ETHNICITY_OPTIONS = [
@@ -93,11 +114,6 @@ const ETHNICITY_OPTIONS = [
   'Western European',
 ].map(title => ({ title }))
 
-const ratioLabel = (flag) => {
-  const words = snakecaseToTitlecase(flag).split(' ')
-  return `Ratio ${words[1]}/${words[2]}`
-}
-
 const CaseReviewStatus = React.memo(({ individual }) => (
   <CaseReviewDropdownContainer>
     <CaseReviewStatusDropdown individual={individual} />
@@ -114,23 +130,6 @@ const CaseReviewStatus = React.memo(({ individual }) => (
 
 CaseReviewStatus.propTypes = {
   individual: PropTypes.object.isRequired,
-}
-
-const ShowRnaSeqOutliers = ({ sample, hasRnaOutlierData, ...props }) => (hasRnaOutlierData ? (
-  <Modal
-    modalName={`OUTRIDER-${sample.sampleId}`}
-    title={`RNA-Seq OUTRIDER: ${sample.sampleId}`}
-    trigger={<ButtonLink padding="1em 0 0 0" content="Show RNA-Seq OUTRIDER" />}
-  >
-    <React.Suspense fallback={<Loader />}>
-      <RnaSeqOutliers sample={sample} {...props} />
-    </React.Suspense>
-  </Modal>
-) : null)
-
-ShowRnaSeqOutliers.propTypes = {
-  hasRnaOutlierData: PropTypes.bool,
-  sample: PropTypes.object,
 }
 
 const MmeStatusLabel = React.memo(({ title, dateField, color, individual, mmeSubmission }) => (
@@ -153,14 +152,51 @@ MmeStatusLabel.propTypes = {
 const DataDetails = React.memo(({ loadedSamples, individual, mmeSubmission }) => (
   <div>
     {loadedSamples.map(
-      sample => <div key={sample.sampleGuid}><Sample loadedSample={sample} isOutdated={!sample.isActive} /></div>,
+      sample => <div key={sample.sampleGuid}><Sample {...sample} isOutdated={!sample.isActive} /></div>,
+    )}
+    {individual.rnaSample && (
+      <Sample
+        sampleType="RNA"
+        loadedDate={individual.rnaSample.loadedDate}
+        hoverContent={`RNAseq methods: ${individual.rnaSample.dataTypes.map(dt => DATASET_TITLE_LOOKUP[dt].trim()).join(', ')}`}
+      />
+    )}
+    {individual.rnaSample && (individual.rnaSample.dataTypes.includes(DATA_TYPE_EXPRESSION_OUTLIER) ||
+      individual.rnaSample.dataTypes.includes(DATA_TYPE_SPLICE_OUTLIER)) && (
+      <div>
+        <Link
+          target="_blank"
+          to={`/project/${individual.projectGuid}/family_page/${individual.familyGuid}/rnaseq_results/${individual.individualGuid}`}
+        >
+          RNAseq Results
+        </Link>
+      </div>
+    )}
+    {individual.phenotypePrioritizationTools.map(
+      ({ tool, loadedDate }) => (
+        <div key={tool}><Sample sampleType={snakecaseToTitlecase(tool)} loadedDate={loadedDate} /></div>
+      ),
+    )}
+    {individual.phenotypePrioritizationTools.length > 0 && (
+      <Modal
+        modalName={`PHENOTYPE-PRIORITIZATION-${individual.individualId}`}
+        title={`Phenotype Prioritized Genes: ${individual.individualId}`}
+        size="large"
+        trigger={<ButtonLink padding="0 0 0 0" content="Show Phenotype Prioritized Genes" />}
+      >
+        <React.Suspense fallback={<Loader />}>
+          <PhenotypePrioritizedGenes familyGuid={individual.familyGuid} individualGuid={individual.individualGuid} />
+        </React.Suspense>
+      </Modal>
     )}
     {mmeSubmission && (
       mmeSubmission.deletedDate ? (
         <Popup
           flowing
           trigger={
-            <MmeStatusLabel title="Removed from MME" dateField="deletedDate" color="red" individual={individual} mmeSubmission={mmeSubmission} />
+            <div>
+              <MmeStatusLabel title="Removed from MME" dateField="deletedDate" color="red" individual={individual} mmeSubmission={mmeSubmission} />
+            </div>
           }
           content={
             <div>
@@ -171,11 +207,6 @@ const DataDetails = React.memo(({ loadedSamples, individual, mmeSubmission }) =>
         />
       ) : <MmeStatusLabel title="Submitted to MME" dateField="lastModifiedDate" color="violet" individual={individual} mmeSubmission={mmeSubmission} />
     )}
-    <ShowRnaSeqOutliers
-      familyGuid={individual.familyGuid}
-      sample={loadedSamples.find(({ sampleType, isActive }) => isActive && sampleType === SAMPLE_TYPE_RNA)}
-      hasRnaOutlierData={individual.hasRnaOutlierData}
-    />
   </div>
 ))
 
@@ -343,42 +374,9 @@ const INDIVIDUAL_FIELD_RENDER_LOOKUP = {
   maternalEthnicity: ETHNICITY_FIELD,
   paternalEthnicity: ETHNICITY_FIELD,
   population: {
-    fieldDisplay: population => POPULATION_MAP[population] || population,
+    fieldDisplay: population => POPULATION_MAP[population] || population || 'Not Loaded',
   },
-  filterFlags: {
-    fieldDisplay: filterFlags => Object.entries(filterFlags).map(([flag, val]) => (
-      <Label
-        key={flag}
-        basic
-        horizontal
-        color="orange"
-        content={`${FLAG_TITLE[flag] || snakecaseToTitlecase(flag)}: ${parseFloat(val).toFixed(2)}`}
-      />
-    )),
-  },
-  popPlatformFilters: {
-    fieldDisplay: filterFlags => Object.keys(filterFlags).map(flag => (
-      <Label
-        key={flag}
-        basic
-        horizontal
-        color="orange"
-        content={flag.startsWith('r_') ? ratioLabel(flag) : snakecaseToTitlecase(flag.replace('n_', 'num._'))}
-      />
-    )),
-  },
-  svFlags: {
-    fieldDisplay: filterFlags => filterFlags.map(flag => (
-      <Label
-        key={flag}
-        basic
-        horizontal
-        color="orange"
-        content={snakecaseToTitlecase(flag)}
-      />
-    )),
-  },
-  features: HPO_FIELD_RENDER,
+  [INDIVIDUAL_FIELD_FEATURES]: { formFields: HPO_FORM_FIELDS },
   disorders: {
     component: ListFieldView,
     formFieldProps: {
@@ -396,9 +394,12 @@ const INDIVIDUAL_FIELD_RENDER_LOOKUP = {
 }
 
 const INDIVIDUAL_FIELDS = INDIVIDUAL_DETAIL_FIELDS.map(
-  ({ field, header, subFields, isEditable, isCollaboratorEditable, isPrivate }) => {
-    const { subFieldsLookup, subFieldProps, ...fieldProps } = INDIVIDUAL_FIELD_RENDER_LOOKUP[field]
-    const formattedField = { field, fieldName: header, isEditable, isCollaboratorEditable, isPrivate, ...fieldProps }
+  ({ field, header, subFields, isEditable, isCollaboratorEditable, isRequiredInternal, isPrivate }) => {
+    const { subFieldsLookup, subFieldProps, ...fieldProps } = INDIVIDUAL_FIELD_RENDER_LOOKUP[field] || {}
+    const coreField = {
+      field, fieldName: header, isEditable, isCollaboratorEditable, isRequiredInternal, isPrivate,
+    }
+    const formattedField = { ...(INDIVIDUAL_FIELD_LOOKUP[field] || {}), ...coreField, ...fieldProps }
     if (subFields) {
       formattedField.formFields = subFields.map(subField => (
         { name: subField.field, label: subField.header, ...subFieldProps, ...(subFieldsLookup || {})[subField.field] }
@@ -422,6 +423,8 @@ const CASE_REVIEW_FIELDS = [
   ...INDIVIDUAL_FIELDS,
 ]
 
+const INDIVIDUAL_FIELD_CONFIG_SEX = INDIVIDUAL_FIELD_CONFIGS[INDIVIDUAL_FIELD_SEX]
+
 const NON_CASE_REVIEW_FIELDS = [
   {
     component: OptionFieldView,
@@ -438,8 +441,97 @@ const NON_CASE_REVIEW_FIELDS = [
       isVisible: caseReviewStatus === CASE_REVIEW_STATUS_MORE_INFO_NEEDED,
     }),
   },
+  {
+    field: INDIVIDUAL_FIELD_SEX,
+    fieldName: INDIVIDUAL_FIELD_CONFIG_SEX.label,
+    isEditable: false,
+    component: OptionFieldView,
+    tagOptions: INDIVIDUAL_FIELD_CONFIG_SEX.formFieldProps.options,
+  },
+  ...[
+    INDIVIDUAL_FIELD_ANALYTE_TYPE,
+    INDIVIDUAL_FIELD_PRIMARY_BIOSAMPLE,
+    INDIVIDUAL_FIELD_TISSUE_AFFECTED,
+  ].map((field) => {
+    const { label, formFieldProps = {} } = INDIVIDUAL_FIELD_CONFIGS[field]
+    return {
+      field,
+      fieldName: label,
+      isEditable: true,
+      isPrivate: true,
+      component: formFieldProps.options ? OptionFieldView : NullableBoolFieldView,
+      tagOptions: formFieldProps.options,
+    }
+  }),
+  {
+    field: 'solveStatus',
+    fieldName: 'Participant Solve Status',
+    isEditable: true,
+    isPrivate: true,
+    component: OptionFieldView,
+    tagOptions: [
+      { value: 'S', text: 'Solved' },
+      { value: 'P', text: 'Partially solved' },
+      { value: 'B', text: 'Probably solved' },
+      { value: 'U', text: 'Unsolved' },
+    ],
+  },
   ...INDIVIDUAL_FIELDS,
 ]
+const EMPTY_FIELDS = [{ id: 'blank', colWidth: 10, component: () => null }]
+
+const mapParentOptionsStateToProps = (state, ownProps) => {
+  const options = getParentOptionsByIndividual(state)[ownProps.meta.data.formId][ownProps.sex] || []
+  return options.length > 0 ? { options: [{ value: null, text: 'None' }, ...options] } : { options, disabled: true }
+}
+
+const EDIT_INDIVIDUAL_FIELDS = [INDIVIDUAL_FIELD_SEX, INDIVIDUAL_FIELD_AFFECTED].map((name) => {
+  const { label, formFieldProps = {} } = INDIVIDUAL_FIELD_CONFIGS[name]
+  return { name, label, ...formFieldProps, component: ButtonRadioGroup, groupContainer: PaddedRadioButtonGroup }
+}).concat([
+  { name: 'paternalGuid', label: 'Father', sex: 'M' }, { name: 'maternalGuid', label: 'Mother', sex: 'F' },
+].map(field => (
+  { ...field, component: connect(mapParentOptionsStateToProps)(Select), inline: true, width: 8 }
+)))
+
+const mapIgvOptionsStateToProps = (state) => {
+  const { workspaceNamespace, workspaceName } = getCurrentProject(state)
+  return {
+    url: `/api/anvil_workspace/${workspaceNamespace}/${workspaceName}/get_igv_options`,
+  }
+}
+
+const EDIT_IGV_FIELDS = [
+  {
+    name: 'filePath',
+    label: 'IGV File Path',
+    component: connect(mapIgvOptionsStateToProps)(LoadOptionsSelect),
+    optionsResponseKey: 'igv_options',
+    formatOption: value => value,
+    errorHeader: 'Unable to Load IGV Files',
+    validationErrorHeader: 'No IGV Files Found',
+    validationErrorMessage: 'No BAMs or CRAMs were found in the workspace associated with this project',
+    validate: validators.required,
+  },
+]
+
+const EditIndividualButton = ({ project, displayName, fieldName, ...props }) => (
+  <BaseFieldView
+    field={`${fieldName || 'core'}Edit`}
+    idField="individualGuid"
+    isEditable={!!project.workspaceName && !project.isAnalystProject && project.canEdit}
+    editLabel={`Edit${fieldName || ' Individual'}`}
+    modalTitle={`Edit ${displayName}${fieldName || ''}`}
+    showErrorPanel
+    {...props}
+  />
+)
+
+EditIndividualButton.propTypes = {
+  project: PropTypes.object.isRequired,
+  displayName: PropTypes.string,
+  fieldName: PropTypes.string,
+}
 
 class IndividualRow extends React.PureComponent {
 
@@ -448,17 +540,21 @@ class IndividualRow extends React.PureComponent {
     individual: PropTypes.object.isRequired,
     mmeSubmission: PropTypes.object,
     samplesByGuid: PropTypes.object.isRequired,
+    alignmentSample: PropTypes.object,
     dispatchUpdateIndividual: PropTypes.func,
+    dispatchUpdateIndividualIGV: PropTypes.func,
+    updateIndividualPedigree: PropTypes.func,
     tableName: PropTypes.string,
   }
 
-  individualFieldDisplay = (
-    { component, isEditable, isCollaboratorEditable, onSubmit, individualFields = () => {}, ...field },
-  ) => {
+  individualFieldDisplay = ({
+    component, isEditable, isCollaboratorEditable, isRequiredInternal, onSubmit, individualFields = () => {}, ...field
+  }) => {
     const { project, individual, dispatchUpdateIndividual } = this.props
     return React.createElement(component || BaseFieldView, {
       key: field.field,
       isEditable: isCollaboratorEditable || (isEditable && project.canEdit),
+      isRequired: isRequiredInternal && individual.affected === AFFECTED && project.isAnalystProject,
       onSubmit: (isEditable || isCollaboratorEditable) && dispatchUpdateIndividual,
       modalTitle: (isEditable || isCollaboratorEditable) && `${field.fieldName} for Individual ${individual.displayName}`,
       initialValues: individual,
@@ -469,7 +565,10 @@ class IndividualRow extends React.PureComponent {
   }
 
   render() {
-    const { individual, mmeSubmission, samplesByGuid, tableName } = this.props
+    const {
+      project, individual, mmeSubmission, samplesByGuid, tableName, updateIndividualPedigree, alignmentSample,
+      dispatchUpdateIndividualIGV,
+    } = this.props
     const { displayName, sex, affected, createdDate, sampleGuids } = individual
 
     let loadedSamples = sampleGuids.map(
@@ -480,7 +579,7 @@ class IndividualRow extends React.PureComponent {
     loadedSamples = loadedSamples.filter((sample, i) => sample.isActive || i === 0 || i === loadedSamples.length - 1)
 
     const leftContent = (
-      <div>
+      <IndividualContainer>
         <div>
           <PedigreeIcon sex={sex} affected={affected} />
           {displayName}
@@ -490,19 +589,41 @@ class IndividualRow extends React.PureComponent {
             {`ADDED ${new Date(createdDate).toLocaleDateString().toUpperCase()}`}
           </Detail>
         </div>
-      </div>
+        <EditIndividualButton
+          initialValues={individual}
+          project={project}
+          displayName={displayName}
+          isDeletable
+          deleteConfirm={`Are you sure you want to delete ${displayName}? This action can not be undone`}
+          formFields={EDIT_INDIVIDUAL_FIELDS}
+          onSubmit={updateIndividualPedigree}
+        />
+        <EditIndividualButton
+          fieldName=" IGV"
+          initialValues={alignmentSample || individual}
+          project={project}
+          displayName={displayName}
+          formFields={EDIT_IGV_FIELDS}
+          onSubmit={dispatchUpdateIndividualIGV}
+        />
+      </IndividualContainer>
     )
 
     const editCaseReview = tableName === CASE_REVIEW_TABLE_NAME
     const rightContent = editCaseReview ?
-      <CaseReviewStatus individual={individual} /> :
-      <DataDetails loadedSamples={loadedSamples} individual={individual} mmeSubmission={mmeSubmission} />
-
-    const fields = editCaseReview ? CASE_REVIEW_FIELDS : NON_CASE_REVIEW_FIELDS
+      <CaseReviewStatus individual={individual} /> : (
+        <DataDetails
+          loadedSamples={loadedSamples}
+          individual={individual}
+          mmeSubmission={mmeSubmission}
+        />
+      )
 
     return (
-      <FamilyLayout
-        fields={fields}
+      <CollapsableLayout
+        layoutComponent={FamilyLayout}
+        detailFields={editCaseReview ? CASE_REVIEW_FIELDS : NON_CASE_REVIEW_FIELDS}
+        noDetailFields={editCaseReview ? EMPTY_FIELDS : null}
         fieldDisplay={this.individualFieldDisplay}
         leftContent={leftContent}
         rightContent={rightContent}
@@ -518,10 +639,15 @@ const mapStateToProps = (state, ownProps) => ({
   project: getCurrentProject(state),
   samplesByGuid: getSamplesByGuid(state),
   mmeSubmission: getMmeSubmissionsByGuid(state)[ownProps.individual.mmeSubmissionGuid],
+  alignmentSample: (
+    getIGVSamplesByFamilySampleIndividual(state)[ownProps.individual.familyGuid]?.alignment || {}
+  )[ownProps.individual.individualGuid],
 })
 
 const mapDispatchToProps = {
   dispatchUpdateIndividual: updateIndividual,
+  dispatchUpdateIndividualIGV: values => updateIndividualIGV(values),
+  updateIndividualPedigree: values => updateIndividuals({ individuals: [values], delete: values.delete }),
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(IndividualRow)

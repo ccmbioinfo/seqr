@@ -1,11 +1,12 @@
 import { createSelector } from 'reselect'
-import uniqBy from 'lodash/uniqBy'
+import uniqWith from 'lodash/uniqWith'
 
 import { compHetGene } from 'shared/components/panel/variants/VariantUtils'
 import { compareObjects } from 'shared/utils/sortUtils'
-import { NOTE_TAG_NAME } from 'shared/utils/constants'
+import { NOTE_TAG_NAME, MME_TAG_NAME, FAMILY_FIELD_ANALYSED_BY, CATEGORY_FAMILY_FILTERS } from 'shared/utils/constants'
 
 export const getProjectsIsLoading = state => state.projectsLoading.isLoading
+export const getProjectDetailsIsLoading = state => state.projectDetailsLoading.isLoading
 export const getProjectsByGuid = state => state.projectsByGuid
 export const getProjectCategoriesByGuid = state => state.projectCategoriesByGuid
 export const getFamiliesByGuid = state => state.familiesByGuid
@@ -24,22 +25,28 @@ export const getMmeSubmissionsByGuid = state => state.mmeSubmissionsByGuid
 export const getMmeResultsByGuid = state => state.mmeResultsByGuid
 export const getGenesById = state => state.genesById
 export const getGenesIsLoading = state => state.genesLoading.isLoading
+export const getTranscriptsById = state => state.transcriptsById
 export const getHpoTermsByParent = state => state.hpoTermsByParent
 export const getHpoTermsIsLoading = state => state.hpoTermsLoading.isLoading
 export const getLocusListsByGuid = state => state.locusListsByGuid
 export const getLocusListsIsLoading = state => state.locusListsLoading.isLoading
 export const getLocusListIsLoading = state => state.locusListLoading.isLoading
 export const getRnaSeqDataByIndividual = state => state.rnaSeqDataByIndividual
+export const getPhenotypeGeneScoresByIndividual = state => state.phenotypeGeneScoresByIndividual
 export const getUser = state => state.user
 export const getUserOptionsByUsername = state => state.userOptionsByUsername
 export const getUserOptionsIsLoading = state => state.userOptionsLoading.isLoading
 export const getVersion = state => state.meta.version
-export const getGoogleLoginEnabled = state => state.meta.googleLoginEnabled
+export const getOauthLoginEnabled = state => !!state.meta.oauthLoginProvider
+export const getOauthLoginProvider = state => state.meta.oauthLoginProvider
+export const getElasticsearchEnabled = state => state.meta.elasticsearchEnabled
 export const getHijakEnabled = state => state.meta.hijakEnabled
 export const getWarningMessages = state => state.meta.warningMessages
+export const getAnvilLoadingDelayDate = state => state.meta.anvilLoadingDelayDate
 export const getSavedVariantsIsLoading = state => state.savedVariantsLoading.isLoading
 export const getSavedVariantsLoadingError = state => state.savedVariantsLoading.errorMessage
 export const getSearchesByHash = state => state.searchesByHash
+export const getSearchFamiliesByHash = state => state.searchFamiliesByHash
 export const getSearchedVariants = state => state.searchedVariants
 export const getSearchedVariantsIsLoading = state => state.searchedVariantsLoading.isLoading
 export const getSearchedVariantsErrorMessage = state => state.searchedVariantsLoading.errorMessage
@@ -58,7 +65,7 @@ const groupEntitiesByProjectGuid = entities => Object.entries(entities).reduce((
 }, {})
 export const getFamiliesGroupedByProjectGuid = createSelector(getFamiliesByGuid, groupEntitiesByProjectGuid)
 export const getAnalysisGroupsGroupedByProjectGuid = createSelector(getAnalysisGroupsByGuid, groupEntitiesByProjectGuid)
-export const getSamplesGroupedByProjectGuid = createSelector(getSamplesByGuid, groupEntitiesByProjectGuid)
+const getSamplesGroupedByProjectGuid = createSelector(getSamplesByGuid, groupEntitiesByProjectGuid)
 
 const groupByFamilyGuid = objs => objs.reduce((acc, o) => {
   if (!acc[o.familyGuid]) {
@@ -95,7 +102,7 @@ export const getProjectAnalysisGroupOptions = createSelector(
 export const getAnalysisGroupsByFamily = createSelector(
   getAnalysisGroupsByGuid,
   analysisGroupsByGuid => Object.values(analysisGroupsByGuid).reduce(
-    (acc, analysisGroup) => analysisGroup.familyGuids.reduce(
+    (acc, analysisGroup) => (analysisGroup.familyGuids || []).reduce(
       (familyAcc, familyGuid) => ({ ...familyAcc, [familyGuid]: [...(familyAcc[familyGuid] || []), analysisGroup] }),
       acc,
     ), {},
@@ -143,15 +150,12 @@ export const getSamplesByFamily = createSelector(
   sortedSamples => groupByFamilyGuid(sortedSamples || []),
 )
 
-export const getHasActiveSearchableSampleByFamily = createSelector(
+export const getHasActiveSearchSampleByFamily = createSelector(
   getSamplesByFamily,
   samplesByFamily => Object.entries(samplesByFamily).reduce(
     (acc, [familyGuid, familySamples]) => ({
       ...acc,
-      [familyGuid]: {
-        isActive: familySamples.some(({ isActive }) => isActive),
-        isSearchable: familySamples.some(({ isActive, elasticsearchIndex }) => isActive && elasticsearchIndex),
-      },
+      [familyGuid]: familySamples.some(({ isActive }) => isActive),
     }), {},
   ),
 )
@@ -177,7 +181,7 @@ export const getProjectDatasetTypes = createSelector(
     (acc, { projectGuid, datasetTypes }) => ({
       ...acc,
       [projectGuid]: datasetTypes || [...new Set(Object.values(samplesByProjectGuid[projectGuid] || {}).filter(
-        ({ isActive, elasticsearchIndex }) => isActive && elasticsearchIndex,
+        ({ isActive }) => isActive,
       ).map(({ datasetType }) => datasetType))],
     }), {},
   ),
@@ -232,11 +236,13 @@ export const getVariantTagNotesByFamilyVariants = createSelector(
   },
 )
 
-export const getTagTypesByProject = createSelector(
+export const getSelectableTagTypesByProject = createSelector(
   getProjectsByGuid,
   projectsByGuid => Object.values(projectsByGuid).reduce((acc, project) => ({
     ...acc,
-    [project.projectGuid]: (project.variantTagTypes || []).filter(vtt => vtt.name !== NOTE_TAG_NAME),
+    [project.projectGuid]: (project.variantTagTypes || []).filter(
+      vtt => vtt.name !== NOTE_TAG_NAME && vtt.name !== MME_TAG_NAME,
+    ),
   }), {}),
 )
 
@@ -311,7 +317,7 @@ export const getDisplayVariants = createSelector(
     const flattened = flattenCompoundHet.all ? searchedVariants.flat() : searchedVariants.reduce((acc, variant) => (
       (Array.isArray(variant) && flattenCompoundHet[compHetGene(variant)]) ? [...acc, ...variant] : [...acc, variant]
     ), [])
-    return uniqBy(flattened, 'variantId')
+    return uniqWith(flattened, (a, b) => !Array.isArray(a) && !Array.isArray(b) && a.variantId === b.variantId)
   },
 )
 
@@ -353,6 +359,25 @@ export const getSearchGeneBreakdownValues = createSelector(
   })),
 )
 
+const groupDataNestedByChrom = (initialData, groupedData, nestedKey) => groupedData.reduce(
+  (acc, data) => {
+    const { chrom } = data
+    if (!acc[chrom]) {
+      acc[chrom] = {}
+    }
+    if (!acc[chrom][nestedKey]) {
+      acc[chrom][nestedKey] = []
+    }
+    acc[chrom][nestedKey].push(data)
+    return acc
+  }, initialData,
+)
+
+export const getOmimIntervalsByChrom = createSelector(
+  state => state.omimIntervals,
+  omimIntervals => groupDataNestedByChrom({}, Object.values(omimIntervals || {}), 'omim'),
+)
+
 export const getLocusListIntervalsByChromProject = createSelector(
   getProjectsByGuid,
   getLocusListsByGuid,
@@ -361,16 +386,7 @@ export const getLocusListIntervalsByChromProject = createSelector(
       const projectIntervals = locusListGuids.map(locusListGuid => locusListsByGuid[locusListGuid]).reduce(
         (acc2, { intervals = [] }) => [...acc2, ...intervals], [],
       )
-      projectIntervals.forEach((interval) => {
-        if (!acc[interval.chrom]) {
-          acc[interval.chrom] = {}
-        }
-        if (!acc[interval.chrom][projectGuid]) {
-          acc[interval.chrom][projectGuid] = []
-        }
-        acc[interval.chrom][projectGuid].push(interval)
-      })
-      return acc
+      return groupDataNestedByChrom(acc, projectIntervals, projectGuid)
     }, {},
   ),
 )
@@ -385,6 +401,10 @@ export const getLocusListTableData = createSelector(
       const { locusListGuids = [] } = projectsByGuid[omitProjectGuid] || {}
       data = data.filter(locusList => !locusListGuids.includes(locusList.locusListGuid))
     }
+
+    data = data.map(({ items, ...locusList }) => (items ?
+      { geneNames: items.map(({ gene }) => (gene || {}).geneSymbol), ...locusList } :
+      locusList))
 
     return data.reduce((acc, locusList) => {
       if (locusList.canEdit) {
@@ -402,4 +422,148 @@ export const getUserOptions = createSelector(
   usersOptionsByUsername => Object.values(usersOptionsByUsername).map(
     user => ({ key: user.username, value: user.username, text: user.displayName ? `${user.displayName} (${user.email})` : user.email }),
   ),
+)
+
+export const getHpoTermOptionsByFamily = createSelector(
+  getIndividualsByFamily,
+  individualsByFamily => Object.entries(individualsByFamily).reduce((acc, [familyGuid, individuals]) => ({
+    ...acc,
+    [familyGuid]: individuals.reduce((fAcc, { features }) => ([...fAcc, ...(features || []).map(
+      ({ id, label }) => ({ value: id, text: label, description: id }),
+    )]), [{ value: 'Uncertain' }]),
+  }), {}),
+)
+
+export const getRnaSeqSignificantJunctionData = createSelector(
+  getGenesById,
+  getIndividualsByGuid,
+  getRnaSeqDataByIndividual,
+  (genesById, individualsByGuid, rnaSeqDataByIndividual) => Object.entries(rnaSeqDataByIndividual || {}).reduce(
+    (acc, [individualGuid, rnaSeqData]) => {
+      const individualData = Object.values(rnaSeqData.spliceOutliers || {}).flat()
+        .filter(({ isSignificant }) => isSignificant)
+        .sort((a, b) => a.pValue - b.pValue)
+        .map(({ geneId, chrom, start, end, strand, type, ...cols }) => ({
+          geneSymbol: (genesById[geneId] || {}).geneSymbol || geneId,
+          idField: `${geneId}-${chrom}-${start}-${end}-${strand}-${type}`,
+          familyGuid: individualsByGuid[individualGuid].familyGuid,
+          individualName: individualsByGuid[individualGuid].displayName,
+          individualGuid,
+          ...{ geneId, chrom, start, end, strand, type, ...cols },
+        }))
+      return (individualData.length > 0 ? { ...acc, [individualGuid]: individualData } : acc)
+    }, {},
+  ),
+)
+
+export const getSpliceOutliersByChromFamily = createSelector(
+  getRnaSeqSignificantJunctionData,
+  spliceDataByIndiv => Object.values(spliceDataByIndiv).reduce(
+    (acc, spliceData) => (groupDataNestedByChrom(acc, spliceData, spliceData[0].familyGuid)), {},
+  ),
+)
+
+const ANALYSED_BY_FILTER_LOOKUP = Object.values(CATEGORY_FAMILY_FILTERS).reduce(
+  (acc, options) => {
+    options.forEach((opt) => {
+      acc[opt.value] = opt.analysedByFilter
+    })
+    return acc
+  }, {},
+)
+
+const NO_ANALYSED_BY_FIELDS = Object.values(CATEGORY_FAMILY_FILTERS).reduce(
+  (acc, options) => {
+    options.filter(opt => opt.requireNoAnalysedBy).forEach((opt) => {
+      acc.add(opt.value)
+    })
+    return acc
+  }, new Set(),
+)
+
+const ANALYSED_BY_CATEGORY_OPTION_LOOKUP = CATEGORY_FAMILY_FILTERS[FAMILY_FIELD_ANALYSED_BY].reduce(
+  (acc, { value, category }) => ({ ...acc, [value]: category || 'Analysed By' }), {},
+)
+
+const isAnalysedBy = (family, analysedByFilter, user, analysedByOptions) => {
+  let requireNoAnalysedBy = false
+  const analsedByGroups = Object.values(analysedByFilter.reduce(
+    (acc, val) => {
+      const optFilter = analysedByOptions?.has(val) ? ({ createdBy }) => createdBy === val :
+        ANALYSED_BY_FILTER_LOOKUP[val]
+      if (optFilter) {
+        const category = ANALYSED_BY_CATEGORY_OPTION_LOOKUP[val]
+        if (!acc[category]) {
+          acc[category] = []
+        }
+        acc[category].push(optFilter)
+      }
+      if (NO_ANALYSED_BY_FIELDS.has(val)) {
+        requireNoAnalysedBy = true
+      }
+      return acc
+    }, {},
+  ))
+  if (!analsedByGroups.length) {
+    return true
+  }
+  const filteredAnalysedBy = analsedByGroups.reduce(
+    (acc, filterGroup) => acc.filter(analysedBy => filterGroup.some(f => f(analysedBy, user))),
+    family.analysedBy,
+  )
+  return requireNoAnalysedBy ? filteredAnalysedBy.length === 0 : filteredAnalysedBy.length > 0
+}
+
+export const familyPassesFilters = createSelector(
+  getUser,
+  getSamplesByFamily,
+  (user, samplesByFamily) => (
+    family, groupedFilters, analysedByOptions, categoryFilters = CATEGORY_FAMILY_FILTERS,
+  ) => {
+    if (groupedFilters.analysedBy && !isAnalysedBy(family, groupedFilters.analysedBy, user, analysedByOptions)) {
+      return false
+    }
+    return Object.entries(groupedFilters).every(([key, groupVals]) => {
+      const filters = categoryFilters[key]?.filter(
+        opt => groupVals.includes(opt.value) && opt.createFilter,
+      ).map(opt => opt.createFilter)
+      return !filters?.length || filters.some(filter => filter(family, user, samplesByFamily))
+    })
+  },
+)
+
+export const getProjectAnalysisGroupFamilyGuidsByGuid = createSelector(
+  getAnalysisGroupsGroupedByProjectGuid,
+  getFamiliesGroupedByProjectGuid,
+  familyPassesFilters,
+  (state, props) => (
+    state.currentProjectGuid ||
+    props.projectGuid ||
+    props.value?.projectGuid ||
+    props.match?.params?.projectGuid ||
+    props.match?.params?.entityGuid
+  ),
+  (projectAnalysisGroupsByGuid, familiesByProjectGuid, passesFilterFunc, projectGuid) => (
+    [
+      ...Object.values(projectAnalysisGroupsByGuid[projectGuid] || {}),
+      ...Object.values(projectAnalysisGroupsByGuid.null || {}),
+    ].reduce((acc, analysisGroup) => ({
+      ...acc,
+      [analysisGroup.analysisGroupGuid]: analysisGroup.criteria ?
+        Object.values(familiesByProjectGuid[projectGuid] || {}).filter(
+          family => passesFilterFunc(family, analysisGroup.criteria),
+        ).map(family => family.familyGuid) : analysisGroup.familyGuids,
+    }), {})
+  ),
+)
+
+export const getAnalysisGroupGuid = (state, props) => (
+  (props || {}).match ? props.match.params.analysisGroupGuid : (props || {}).analysisGroupGuid
+)
+
+export const getCurrentAnalysisGroupFamilyGuids = createSelector(
+  getAnalysisGroupGuid,
+  getProjectAnalysisGroupFamilyGuidsByGuid,
+  (state, props) => state.currentProjectGuid || props.match?.params?.projectGuid,
+  (analysisGroupGuid, analysisGroupFamilyGuidsByGuid) => analysisGroupFamilyGuidsByGuid[analysisGroupGuid],
 )

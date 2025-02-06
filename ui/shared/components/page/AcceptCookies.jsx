@@ -2,6 +2,7 @@ import React from 'react'
 import Cookies from 'js-cookie'
 import { Modal } from 'semantic-ui-react'
 import { Route, Switch, Link } from 'react-router-dom'
+import { PUBLIC_PAGES } from 'shared/utils/constants'
 
 const COOKIE_ACTIONS = [{
   primary: true,
@@ -23,8 +24,8 @@ const AcceptCookies = () => (
       content={
         <Modal.Content>
           seqr collects cookies to improve our user experience and ensure the secure functioning of our site. For more
-          details, see our &npsp;
-          <Link target="_blank" to="/privacy_policy">Privacy Policy</Link>
+          details, see our
+          <Link target="_blank" to="/privacy_policy"> Privacy Policy</Link>
           . By clicking &quot;Accept&quot;, you consent to the use of these cookies.
         </Modal.Content>
       }
@@ -33,11 +34,9 @@ const AcceptCookies = () => (
   )
 )
 
-const NO_COOKIE_PAGES = ['/matchmaker', '/privacy_policy', '/terms_of_service']
-
 export default () => (
   <Switch>
-    {NO_COOKIE_PAGES.map(page => <Route key={page} path={page} component={null} />)}
+    {PUBLIC_PAGES.map(page => <Route key={page} path={page} component={null} />)}
     <Route component={AcceptCookies} />
   </Switch>
 )

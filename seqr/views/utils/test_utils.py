@@ -1,12 +1,17 @@
 # Utilities used for unit and integration tests.
+from collections import defaultdict
+from copy import deepcopy
 from django.contrib.auth.models import User, Group
 from django.test import TestCase
 from guardian.shortcuts import assign_perm
+from io import StringIO
 import json
+import logging
 import mock
 import re
+import requests
+import responses
 from urllib.parse import quote_plus, urlparse
-from urllib3_mock import Responses
 
 from seqr.models import Project, CAN_VIEW, CAN_EDIT
 
@@ -24,6 +29,9 @@ class AuthenticationTestCase(TestCase):
     AUTHENTICATED_USER = 'authenticated'
     NO_POLICY_USER = 'no_policy'
 
+    ES_HOSTNAME = 'testhost'
+    MOCK_AIRTABLE_KEY = ''
+
     super_user = None
     analyst_user = None
     pm_user = None
@@ -35,12 +43,28 @@ class AuthenticationTestCase(TestCase):
     no_policy_user = None
 
     def setUp(self):
+        patcher = mock.patch('seqr.utils.search.elasticsearch.es_utils.ELASTICSEARCH_SERVICE_HOSTNAME', self.ES_HOSTNAME)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.airtable_utils.AIRTABLE_API_KEY', self.MOCK_AIRTABLE_KEY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         patcher = mock.patch('seqr.views.utils.permissions_utils.SEQR_PRIVACY_VERSION', 2.1)
         patcher.start()
         self.addCleanup(patcher.stop)
         patcher = mock.patch('seqr.views.utils.permissions_utils.SEQR_TOS_VERSION', 1.3)
         patcher.start()
         self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.permissions_utils.ANALYST_USER_GROUP')
+        self.mock_analyst_group = patcher.start()
+        self.mock_analyst_group.__str__.return_value = 'Analysts'
+        self.mock_analyst_group.__eq__.side_effect = lambda s: str(self.mock_analyst_group) == s
+        self.mock_analyst_group.__bool__.side_effect = lambda: bool(str(self.mock_analyst_group))
+        self.mock_analyst_group.resolve_expression.return_value = 'analysts'
+        self.addCleanup(patcher.stop)
+
+        self._log_stream = StringIO()
+        logging.getLogger().handlers[0].stream = self._log_stream
 
     @classmethod
     def setUpTestData(cls):
@@ -53,6 +77,7 @@ class AuthenticationTestCase(TestCase):
         cls.no_access_user = User.objects.get(username='test_user_no_access')
         cls.inactive_user = User.objects.get(username='test_user_inactive')
         cls.no_policy_user = User.objects.get(username='test_user_no_policies')
+        cls.local_user = User.objects.get(username='test_local_user')
 
         edit_group = Group.objects.get(pk=2)
         view_group = Group.objects.get(pk=3)
@@ -61,6 +86,18 @@ class AuthenticationTestCase(TestCase):
         assign_perm(user_or_group=edit_group, perm=CAN_EDIT, obj=Project.objects.filter(can_edit_group=edit_group))
         assign_perm(user_or_group=edit_group, perm=CAN_VIEW, obj=Project.objects.filter(can_view_group=edit_group))
         assign_perm(user_or_group=view_group, perm=CAN_VIEW, obj=Project.objects.filter(can_view_group=view_group))
+
+        cls.add_additional_user_groups()
+
+    @classmethod
+    def add_additional_user_groups(cls):
+        analyst_group = Group.objects.get(pk=4)
+        analyst_group.user_set.add(cls.analyst_user, cls.pm_user)
+        assign_perm(user_or_group=analyst_group, perm=CAN_EDIT, obj=Project.objects.filter(id__in=[1, 2, 3]))
+        assign_perm(user_or_group=analyst_group, perm=CAN_VIEW, obj=Project.objects.filter(id__in=[1, 2, 3]))
+
+        pm_group = Group.objects.get(pk=5)
+        pm_group.user_set.add(cls.pm_user)
 
     def check_require_login(self, url, **request_kwargs):
         self._check_login(url, self.AUTHENTICATED_USER, **request_kwargs)
@@ -195,11 +232,52 @@ class AuthenticationTestCase(TestCase):
     def get_initial_page_json(self, response):
         return self.get_initial_page_window('initialJSON', response)
 
+    def check_no_analyst_no_access(self, url, get_response=None, has_override=False):
+        self.mock_analyst_group.__str__.return_value = ''
+
+        response = get_response() if get_response else self.client.get(url)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['error'], 'Permission Denied')
+
+        self.client.force_login(self.super_user)
+        response = get_response() if get_response else self.client.get(url)
+        self.assertEqual(response.status_code, 200 if has_override else 403)
+        return response
+
+    def reset_logs(self):
+        self._log_stream.truncate(0)
+        self._log_stream.seek(0)
+
+    def assert_json_logs(self, user, expected, offset=0):
+        logs = self._log_stream.getvalue().split('\n')
+        if offset:
+            logs = logs[offset:]
+        for i, (message, extra) in enumerate(expected):
+            extra = extra or {}
+            validate = extra.pop('validate', None)
+            log_value = json.loads(logs[i])
+            expected_log = {
+                'timestamp': mock.ANY, 'severity': 'INFO', **extra,
+            }
+            if user:
+                expected_log['user'] = user.email
+            if message is not None:
+                expected_log['message'] = message
+            self.assertDictEqual(log_value, expected_log)
+            if validate:
+                validate(log_value)
+
+    def assert_no_logs(self):
+        self.assertEqual(self._log_stream.getvalue(), '')
+
 TEST_WORKSPACE_NAMESPACE = 'my-seqr-billing'
 TEST_WORKSPACE_NAME = 'anvil-1kg project n\u00e5me with uni\u00e7\u00f8de'
 TEST_WORKSPACE_NAME1 = 'anvil-project 1000 Genomes Demo'
+TEST_EMPTY_PROJECT_WORKSPACE = 'empty'
 TEST_NO_PROJECT_WORKSPACE_NAME = 'anvil-no-project-workspace1'
 TEST_NO_PROJECT_WORKSPACE_NAME2 = 'anvil-no-project-workspace2'
+EXT_WORKSPACE_NAMESPACE = 'ext-data'
+EXT_WORKSPACE_NAME = 'anvil-non-analyst-project 1000 Genomes Demo'
 
 TEST_SERVICE_ACCOUNT = 'test_account@my-seqr.iam.gserviceaccount.com'
 
@@ -232,6 +310,12 @@ ANVIL_WORKSPACES = [{
             "canShare": False,
             "canCompute": True
         },
+        'Analysts@firecloud.org': {
+            "accessLevel": "WRITER",
+            "pending": False,
+            "canShare": False,
+            "canCompute": False
+        },
         'test_user_pure_anvil@test.com': {
             "accessLevel": "READER",
             "pending": False,
@@ -258,7 +342,13 @@ ANVIL_WORKSPACES = [{
             "pending": False,
             "canShare": False,
             "canCompute": False
-        }
+        },
+        'Analysts@firecloud.org': {
+            "accessLevel": "WRITER",
+            "pending": False,
+            "canShare": False,
+            "canCompute": False
+        },
     },
     'workspace': {
         'bucketName': 'test_bucket'
@@ -279,11 +369,29 @@ ANVIL_WORKSPACES = [{
             "pending": False,
             "canShare": False,
             "canCompute": True
-        }
+        },
     },
     'workspace': {
         'authorizationDomain': [],
         'bucketName': 'test_bucket'
+    },
+}, {
+    'workspace_namespace': EXT_WORKSPACE_NAMESPACE,
+    'workspace_name': TEST_EMPTY_PROJECT_WORKSPACE,
+    'public': False,
+    'acl': {
+        'Analysts@firecloud.org': {
+            "accessLevel": "WRITER",
+            "pending": False,
+            "canShare": False,
+            "canCompute": False
+        },
+        'test_user_manager@test.com': {
+            "accessLevel": "WRITER",
+            "pending": False,
+            "canShare": True,
+            "canCompute": True
+        },
     },
 }, {
     'workspace_namespace': TEST_WORKSPACE_NAMESPACE,
@@ -307,12 +415,38 @@ ANVIL_WORKSPACES = [{
         'authorizationDomain': [{'membersGroupName': 'AUTH_restricted_group'}],
         'bucketName': 'test_bucket'
     },
-}
+}, {
+    'workspace_namespace': EXT_WORKSPACE_NAMESPACE,
+    'workspace_name': EXT_WORKSPACE_NAME,
+    'public': True,
+    'acl': {
+        'test_user_manager@test.com': {
+            "accessLevel": "WRITER",
+            "pending": False,
+            "canShare": True,
+            "canCompute": True
+        },
+    },
+    'workspace': {
+        'authorizationDomain': [],
+        'bucketName': 'test_bucket'
+    },
+},
 ]
 
 
+ANVIL_GROUPS = {
+    'project-managers': ['test_pm_user@test.com'],
+    'Analysts': ['test_pm_user@test.com', 'test_user@broadinstitute.org'],
+}
+ANVIL_GROUP_LOOKUP = defaultdict(list)
+for group, users in ANVIL_GROUPS.items():
+    for user in users:
+        ANVIL_GROUP_LOOKUP[user].append(group)
+
+
 TEST_TERRA_API_ROOT_URL =  'https://terra.api/'
-TEST_OAUTH2_KEY = 'abc123'
+TEST_OAUTH2_PROVIDER = 'google-oauth2'
 
 # the time must the same as that in 'auth_time' in the social_auth fixture data
 TOKEN_AUTH_TIME = 1603287741
@@ -329,7 +463,11 @@ def get_ws_al_side_effect(user, workspace_namespace, workspace_name, meta_fields
     wss = filter(lambda x: x['workspace_namespace'] == workspace_namespace and x['workspace_name'] == workspace_name, ANVIL_WORKSPACES)
     wss = list(wss)
     acl = wss[0]['acl'] if wss else {}
-    user_acl = next((v for k, v in acl.items() if user.email.lower() == k.lower()), None)
+    email = user.email.lower()
+    user_acl = next((v for k, v in acl.items() if email == k.lower()), None)
+    for user_group in ANVIL_GROUP_LOOKUP[email]:
+        if not user_acl:
+            user_acl = acl.get(f'{user_group}@firecloud.org')
     access_level = {
         'accessLevel': user_acl['accessLevel'],
         'canShare': user_acl['canShare'],
@@ -344,6 +482,7 @@ def get_ws_al_side_effect(user, workspace_namespace, workspace_name, meta_fields
 
 
 def get_workspaces_side_effect(user):
+    email = user.email.lower()
     return [
         {
             'public': ws['public'],
@@ -351,21 +490,44 @@ def get_workspaces_side_effect(user):
                 'namespace': ws['workspace_namespace'],
                 'name': ws['workspace_name']
             }
-        } for ws in ANVIL_WORKSPACES if any(user.email.lower() == k.lower() for k in ws['acl'].keys())
+        } for ws in ANVIL_WORKSPACES if any(
+            email == k.lower() or k.replace('@firecloud.org', '') in ANVIL_GROUP_LOOKUP[email]
+            for k in ws['acl'].keys())
     ]
 
 
+
+def get_groups_side_effect(user):
+    return [group for group, users in ANVIL_GROUPS.items() if user.email in users]
+
+
+def get_group_members_side_effect(user, group, use_sa_credentials=False):
+    members = ANVIL_GROUPS[str(group)]
+    if user.email in members or use_sa_credentials:
+        return members
+    return {}
+
+
 class AnvilAuthenticationTestCase(AuthenticationTestCase):
+
+    ES_HOSTNAME = ''
+    MOCK_AIRTABLE_KEY = 'airflow_access'
 
     # mock the terra apis
     def setUp(self):
         patcher = mock.patch('seqr.views.utils.terra_api_utils.TERRA_API_ROOT_URL', TEST_TERRA_API_ROOT_URL)
         patcher.start()
         self.addCleanup(patcher.stop)
-        patcher = mock.patch('seqr.views.utils.terra_api_utils.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY', TEST_OAUTH2_KEY)
+        patcher = mock.patch('seqr.views.react_app.SOCIAL_AUTH_PROVIDER', TEST_OAUTH2_PROVIDER)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.terra_api_utils.SOCIAL_AUTH_PROVIDER', TEST_OAUTH2_PROVIDER)
         patcher.start()
         self.addCleanup(patcher.stop)
         patcher = mock.patch('seqr.views.utils.orm_to_json_utils.SERVICE_ACCOUNT_FOR_ANVIL', TEST_SERVICE_ACCOUNT)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.permissions_utils.INTERNAL_NAMESPACES', ['my-seqr-billing'])
         patcher.start()
         self.addCleanup(patcher.stop)
         patcher = mock.patch('seqr.views.utils.terra_api_utils.time')
@@ -383,29 +545,209 @@ class AnvilAuthenticationTestCase(AuthenticationTestCase):
         self.mock_get_ws_access_level = patcher.start()
         self.mock_get_ws_access_level.side_effect = get_ws_al_side_effect
         self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.permissions_utils.user_get_anvil_groups')
+        self.mock_get_groups = patcher.start()
+        self.mock_get_groups.side_effect = get_groups_side_effect
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.permissions_utils.get_anvil_group_members')
+        self.mock_get_group_members = patcher.start()
+        self.mock_get_group_members.side_effect = get_group_members_side_effect
+        self.addCleanup(patcher.stop)
         super(AnvilAuthenticationTestCase, self).setUp()
 
+    @classmethod
+    def add_additional_user_groups(cls):
+        analyst_group = Group.objects.get(pk=4)
+        analyst_group.user_set.add(cls.analyst_user, cls.pm_user)
 
-# The responses library for mocking requests does not work with urllib3 (which is used by elasticsearch)
-# The urllib3_mock library works for those requests, but it has limited functionality, so this extension adds helper
-# methods for easier usage
-class Urllib3Responses(Responses):
-    def add_json(self, url, json_response, method=None, match_querystring=True, **kwargs):
-        if not method:
-            method = self.GET
-        body = json.dumps(json_response)
-        self.add(method, url, match_querystring=match_querystring, content_type='application/json', body=body, **kwargs)
-
-    def replace_json(self, url, *args, **kwargs):
-        existing_index = next(i for i, match in enumerate(self._urls) if match['url'] == url)
-        self.add_json(url, *args, **kwargs)
-        self._urls[existing_index] = self._urls.pop()
-
-    def call_request_json(self, index=-1):
-        return json.loads(self.calls[index].request.body)
+    def assert_no_extra_anvil_calls(self):
+        self.mock_get_ws_acl.assert_not_called()
+        self.mock_get_groups.assert_not_called()
+        self.mock_get_group_members.assert_not_called()
 
 
-urllib3_responses = Urllib3Responses()
+
+PROJECT_GUID = 'R0001_1kg'
+
+class AirflowTestCase(AnvilAuthenticationTestCase):
+    MOCK_AIRFLOW_URL = 'http://testairflowserver'
+    ADDITIONAL_REQUEST_COUNT = 0
+    DAG_NAME = 'LOADING_PIPELINE'
+
+    def setUp(self):
+        self._dag_url = f'{self.MOCK_AIRFLOW_URL}/api/v1/dags/{self.DAG_NAME}'
+        self.set_up_one_dag()
+
+        patcher = mock.patch('seqr.views.utils.airflow_utils.google.auth.default', lambda **kwargs: (None, None))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.airflow_utils.AuthorizedSession', mock.Mock(return_value=requests))
+        self.mock_authorized_session = patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.airflow_utils.AIRFLOW_WEBSERVER_URL', self.MOCK_AIRFLOW_URL)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.airflow_utils.safe_post_to_slack')
+        self.mock_slack = patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch('seqr.views.utils.airflow_utils.logger')
+        self.mock_airflow_logger = patcher.start()
+        self.addCleanup(patcher.stop)
+
+        super().setUp()
+
+    def set_up_one_dag(self, **kwargs):
+        # check dag running state
+        responses.add(responses.GET, f'{self._dag_url}/dagRuns', json={
+            'dag_runs': [{
+                'conf': {},
+                'dag_id': 'seqr_vcf_to_es_AnVIL_WGS_v0.0.1',
+                'dag_run_id': 'manual__2022-04-28T11:51:22.735124+00:00',
+                'end_date': None, 'execution_date': '2022-04-28T11:51:22.735124+00:00',
+                'external_trigger': True, 'start_date': '2022-04-28T11:51:25.626176+00:00',
+                'state': 'success'}
+            ]})
+        # trigger dag
+        responses.add(responses.POST, f'{self._dag_url}/dagRuns', json={})
+        # update variables
+        responses.add(
+            responses.PATCH, f'{self.MOCK_AIRFLOW_URL}/api/v1/variables/{self.DAG_NAME}',
+            json={'key': self.DAG_NAME, 'value': 'updated variables'},
+        )
+        # check for updated variables
+        self._add_update_check_dag_responses(**kwargs)
+
+    def _add_update_check_dag_responses(self, **kwargs):
+        # get task id
+        self._add_dag_tasks_response(['R0006_test'])
+        # get task id again if the response of the previous request didn't include the updated guid
+        self._add_dag_tasks_response([self.LOADING_PROJECT_GUID])
+        # get task id again if the response of the previous request didn't include the updated guid
+        self._add_dag_tasks_response([self.LOADING_PROJECT_GUID, PROJECT_GUID])
+
+    def _add_dag_tasks_response(self, projects):
+        tasks = []
+        for project in projects:
+            tasks += [
+                {'task_id': 'create_dataproc_cluster'},
+                {'task_id': f'pyspark_compute_project_{project}'},
+                {'task_id': f'pyspark_compute_variants_{self.DAG_NAME}'},
+                {'task_id': f'pyspark_export_project_{project}'},
+                {'task_id': 'scale_dataproc_cluster'},
+                {'task_id': f'skip_compute_project_subset_{project}'}
+            ]
+        responses.add(responses.GET, f'{self._dag_url}/tasks', json={
+            'tasks': tasks, 'total_entries': len(tasks),
+        })
+
+    def set_dag_trigger_error_response(self, status=200):
+        responses.replace(responses.GET, f'{self._dag_url}/dagRuns', status=status, json={'dag_runs': [{
+            'conf': {},
+            'dag_id': self.DAG_NAME,
+            'dag_run_id': 'manual__2022-04-28T11:51:22.735124+00:00',
+            'end_date': None, 'execution_date': '2022-04-28T11:51:22.735124+00:00',
+            'external_trigger': True, 'start_date': '2022-04-28T11:51:25.626176+00:00',
+            'state': 'running'}
+        ]})
+
+    def assert_airflow_loading_calls(self, trigger_error=False, additional_tasks_check=False, dataset_type=None, offset=0, **kwargs):
+        call_count = 5
+        if additional_tasks_check:
+            call_count = 6
+        if trigger_error:
+            call_count = 1
+        self._assert_call_counts(call_count)
+
+        dag_variable_overrides = self._get_dag_variable_overrides(additional_tasks_check)
+        dag_variables = {
+            'projects_to_run': [dag_variable_overrides['project']] if 'project' in dag_variable_overrides else self.PROJECTS,
+            'dataset_type': dataset_type or dag_variable_overrides['dataset_type'],
+            'reference_genome': dag_variable_overrides.get('reference_genome', 'GRCh38'),
+            'callset_path': f'gs://test_bucket/{dag_variable_overrides["callset_path"]}',
+            'sample_type': dag_variable_overrides['sample_type'],
+        }
+        if dag_variable_overrides.get('skip_validation'):
+            dag_variables['skip_validation'] = True
+        dag_variables['sample_source'] = dag_variable_overrides['sample_source']
+        self._assert_airflow_calls(dag_variables, call_count, offset=offset)
+
+    def _assert_call_counts(self, call_count):
+        self.mock_airflow_logger.info.assert_not_called()
+        self.assertEqual(len(responses.calls), call_count + self.ADDITIONAL_REQUEST_COUNT)
+        self.assertEqual(self.mock_authorized_session.call_count, call_count)
+
+    def _assert_airflow_calls(self, dag_variables, call_count, offset=0):
+        self._assert_dag_running_state_calls(offset)
+
+        if call_count < 2:
+            return
+
+        self._assert_update_variables_airflow_calls(dag_variables, offset)
+        self._assert_update_check_airflow_calls(call_count, offset, update_check_path=f'{self._dag_url}/tasks')
+        call_cnt = call_count - 1
+
+        # trigger dag
+        self.assertEqual(responses.calls[offset+call_cnt].request.url, f'{self._dag_url}/dagRuns')
+        self.assertEqual(responses.calls[offset+call_cnt].request.method, 'POST')
+        self.assertDictEqual(json.loads(responses.calls[offset+call_cnt].request.body), {})
+
+        self.mock_airflow_logger.warning.assert_not_called()
+        self.mock_airflow_logger.error.assert_not_called()
+
+    def _assert_dag_running_state_calls(self, offset):
+        self.assertEqual(responses.calls[offset].request.url, f'{self._dag_url}/dagRuns')
+        self.assertEqual(responses.calls[offset].request.method, "GET")
+
+    def _assert_update_variables_airflow_calls(self, dag_variables, offset):
+        self.assertEqual(responses.calls[offset+1].request.url, f'{self.MOCK_AIRFLOW_URL}/api/v1/variables/{self.DAG_NAME}')
+        self.assertEqual(responses.calls[offset+1].request.method, 'PATCH')
+        request_body = json.loads(responses.calls[offset + 1].request.body)
+        self.assertEqual(request_body['key'], self.DAG_NAME)
+        self.assertDictEqual(
+            json.loads(request_body['value']),
+            json.loads(json.dumps(dag_variables))
+        )
+
+    def _assert_update_check_airflow_calls(self, call_count, offset, update_check_path):
+        self.assertEqual(responses.calls[offset + 2].request.url, update_check_path)
+        self.assertEqual(responses.calls[offset + 2].request.method, 'GET')
+
+        self.assertEqual(responses.calls[offset + 3].request.url, update_check_path)
+        self.assertEqual(responses.calls[offset + 3].request.method, 'GET')
+
+        if call_count > 5:
+            self.assertEqual(responses.calls[offset + 4].request.url, update_check_path)
+            self.assertEqual(responses.calls[offset + 4].request.method, 'GET')
+
+
+    @staticmethod
+    def _get_dag_variable_overrides(additional_tasks_check):
+        raise NotImplementedError
+
+
+@mock.patch('seqr.views.utils.terra_api_utils.SOCIAL_AUTH_PROVIDER', TEST_OAUTH2_PROVIDER)
+class AirtableTest(object):
+
+    def assert_expected_airtable_call(self, call_index, filter_formula, fields, additional_params=None):
+        expected_params = {
+            'fields[]': mock.ANY,
+            'pageSize': '100',
+            'filterByFormula': filter_formula,
+        }
+        if additional_params:
+            expected_params.update(additional_params)
+        self.assertDictEqual(responses.calls[call_index].request.params, expected_params)
+        self.assertListEqual(self._get_list_param(responses.calls[call_index].request, 'fields%5B%5D'), fields)
+        self.assert_expected_airtable_headers(call_index)
+
+    def assert_expected_airtable_headers(self, call_index):
+        self.assertEqual(responses.calls[call_index].request.headers['Authorization'], f'Bearer {self.MOCK_AIRTABLE_KEY}')
+
+    @staticmethod
+    def _get_list_param(call, param):
+        query_params = call.url.split('?')[1].split('&')
+        param_str = f'{param}='
+        return [p.replace(param_str, '') for p in query_params if p.startswith(param_str)]
 
 
 USER_FIELDS = {
@@ -416,60 +758,81 @@ PROJECT_FIELDS = {
     'projectGuid', 'projectCategoryGuids', 'canEdit', 'name', 'description', 'createdDate', 'lastModifiedDate',
     'lastAccessedDate',  'mmeContactUrl', 'genomeVersion', 'mmePrimaryDataOwner', 'mmeContactInstitution',
     'isMmeEnabled', 'workspaceName', 'workspaceNamespace', 'hasCaseReview', 'enableHgmd', 'isDemo', 'allUserDemo',
-    'userIsCreator', 'consentCode', 'isAnalystProject',
+    'userIsCreator', 'consentCode', 'isAnalystProject', 'vlmContactEmail',
 }
 
 ANALYSIS_GROUP_FIELDS = {'analysisGroupGuid', 'description', 'name', 'projectGuid', 'familyGuids'}
+DYNAMIC_ANALYSIS_GROUP_FIELDS = {'analysisGroupGuid', 'criteria', 'name', 'projectGuid'}
 
-FAMILY_FIELDS = {
-    'projectGuid', 'familyGuid', 'analysedBy', 'pedigreeImage', 'familyId', 'displayName', 'description',
-    'analysisStatus', 'pedigreeImage', 'createdDate', 'assignedAnalyst', 'codedPhenotype', 'postDiscoveryOmimNumber',
-    'pedigreeDataset', 'analysisStatusLastModifiedDate', 'analysisStatusLastModifiedBy'
+SUMMARY_FAMILY_FIELDS = {
+    'projectGuid', 'familyGuid', 'analysedBy', 'familyId', 'displayName', 'description',
+    'analysisStatus', 'createdDate', 'assignedAnalyst', 'codedPhenotype', 'mondoId',
 }
+FAMILY_FIELDS = {
+    'pedigreeImage', 'postDiscoveryOmimNumbers',
+    'pedigreeDataset', 'analysisStatusLastModifiedDate', 'analysisStatusLastModifiedBy', 'mondoId',
+}
+FAMILY_FIELDS.update(SUMMARY_FAMILY_FIELDS)
 CASE_REVIEW_FAMILY_FIELDS = {
     'caseReviewNotes', 'caseReviewSummary'
 }
 INTERNAL_FAMILY_FIELDS = {
-    'individualGuids', 'successStory', 'successStoryTypes', 'pubmedIds',
+    'individualGuids', 'successStory', 'successStoryTypes', 'pubmedIds', 'externalData', 'postDiscoveryMondoId'
 }
 INTERNAL_FAMILY_FIELDS.update(FAMILY_FIELDS)
 
 FAMILY_NOTE_FIELDS = {'noteGuid', 'note', 'noteType', 'lastModifiedDate', 'createdBy', 'familyGuid'}
 
-INDIVIDUAL_FIELDS_NO_FEATURES = {
-    'projectGuid', 'familyGuid', 'individualGuid', 'individualId',
-    'paternalId', 'maternalId', 'sex', 'affected', 'displayName', 'notes', 'createdDate', 'lastModifiedDate',
-    'paternalGuid', 'maternalGuid', 'popPlatformFilters', 'filterFlags', 'population', 'birthYear', 'deathYear',
+
+INDIVIDUAL_CORE_FIELDS = {
+    'individualGuid', 'individualId', 'sex', 'affected', 'displayName', 'notes', 'createdDate', 'lastModifiedDate',
+    'popPlatformFilters', 'filterFlags', 'population', 'birthYear', 'deathYear',
     'onsetAge', 'maternalEthnicity', 'paternalEthnicity', 'consanguinity', 'affectedRelatives', 'expectedInheritance',
     'disorders', 'candidateGenes', 'rejectedGenes', 'arFertilityMeds', 'arIui', 'arIvf', 'arIcsi', 'arSurrogacy',
     'arDonoregg', 'arDonorsperm', 'svFlags',
 }
 
-INDIVIDUAL_FIELDS = {'features', 'absentFeatures', 'nonstandardFeatures', 'absentNonstandardFeatures'}
-INDIVIDUAL_FIELDS.update(INDIVIDUAL_FIELDS_NO_FEATURES)
-
-INTERNAL_INDIVIDUAL_FIELDS = {
-    'caseReviewStatus', 'caseReviewDiscussion', 'caseReviewStatusLastModifiedDate', 'caseReviewStatusLastModifiedBy',
-    'probandRelationship',
+INDIVIDUAL_FIELDS = {
+    'projectGuid', 'familyGuid', 'paternalId', 'maternalId', 'paternalGuid', 'maternalGuid',
+    'features', 'absentFeatures', 'nonstandardFeatures', 'absentNonstandardFeatures',
 }
-INTERNAL_INDIVIDUAL_FIELDS.update(INDIVIDUAL_FIELDS)
+INDIVIDUAL_FIELDS.update(INDIVIDUAL_CORE_FIELDS)
+
+CASE_REVIEW_INDIVIDUAL_FIELDS = {
+    'caseReviewStatus', 'caseReviewDiscussion', 'caseReviewStatusLastModifiedDate', 'caseReviewStatusLastModifiedBy',
+}
+CORE_INTERNAL_INDIVIDUAL_FIELDS = {
+    'probandRelationship', 'analyteType', 'primaryBiosample', 'tissueAffectedStatus', 'solveStatus',
+}
+
+NO_INTERNAL_CASE_REVIEW_INDIVIDUAL_FIELDS = deepcopy(INDIVIDUAL_FIELDS)
+NO_INTERNAL_CASE_REVIEW_INDIVIDUAL_FIELDS.update(CASE_REVIEW_INDIVIDUAL_FIELDS)
+
+INTERNAL_INDIVIDUAL_FIELDS = deepcopy(NO_INTERNAL_CASE_REVIEW_INDIVIDUAL_FIELDS)
+INTERNAL_INDIVIDUAL_FIELDS.update(CORE_INTERNAL_INDIVIDUAL_FIELDS)
 
 SAMPLE_FIELDS = {
     'projectGuid', 'familyGuid', 'individualGuid', 'sampleGuid', 'createdDate', 'sampleType', 'sampleId', 'isActive',
-    'loadedDate', 'datasetType', 'elasticsearchIndex',
+    'loadedDate', 'datasetType',
 }
 
 IGV_SAMPLE_FIELDS = {
-    'projectGuid', 'familyGuid', 'individualGuid', 'sampleGuid', 'filePath', 'sampleId', 'sampleType',
+    'projectGuid', 'familyGuid', 'individualGuid', 'sampleGuid', 'filePath', 'indexFilePath', 'sampleId', 'sampleType',
 }
 
 SAVED_VARIANT_FIELDS = {'variantGuid', 'variantId', 'familyGuids', 'xpos', 'ref', 'alt', 'selectedMainTranscriptId', 'acmgClassification'}
+SAVED_VARIANT_DETAIL_FIELDS = {
+    'chrom', 'pos', 'genomeVersion', 'liftedOverGenomeVersion', 'liftedOverChrom', 'liftedOverPos', 'tagGuids',
+    'functionalDataGuids', 'noteGuids', 'originalAltAlleles', 'genotypes', 'hgmd', 'CAID',
+    'transcripts', 'populations', 'predictions', 'rsid', 'genotypeFilters', 'clinvar', 'acmgClassification'
+}
+SAVED_VARIANT_DETAIL_FIELDS.update(SAVED_VARIANT_FIELDS)
 
 TAG_FIELDS = {
     'tagGuid', 'name', 'category', 'color', 'searchHash', 'metadata', 'lastModifiedDate', 'createdBy', 'variantGuids',
 }
 
-VARIANT_NOTE_FIELDS = {'noteGuid', 'note', 'submitToClinvar', 'lastModifiedDate', 'createdBy', 'variantGuids'}
+VARIANT_NOTE_FIELDS = {'noteGuid', 'note', 'report', 'lastModifiedDate', 'createdBy', 'variantGuids'}
 
 FUNCTIONAL_FIELDS = {
     'tagGuid', 'name', 'color', 'metadata', 'metadataTitle', 'lastModifiedDate', 'createdBy', 'variantGuids',
@@ -498,7 +861,7 @@ GENE_FIELDS = {
     'gencodeGeneType', 'geneId', 'geneSymbol', 'startGrch37', 'startGrch38',
 }
 GENE_VARIANT_DISPLAY_FIELDS = {
-    'constraints', 'omimPhenotypes', 'mimNumber', 'cnSensitivity', 'genCc', 'clinGen',
+    'constraints', 'omimPhenotypes', 'mimNumber', 'cnSensitivity', 'genCc', 'clinGen', 'sHet',
 }
 GENE_VARIANT_DISPLAY_FIELDS.update(GENE_FIELDS)
 GENE_VARIANT_FIELDS = {
@@ -565,6 +928,11 @@ VARIANTS = [
             ]
         },
         'familyGuids': ['F000001_1', 'F000002_2'],
+        'populations': {
+            'callset': {'af': 0.13, 'ac': 4192, 'an': '32588'},
+            'gnomad_genomes': {'af': 0.007},
+        },
+        'genotypeFilters': 'VQSRTrancheSNP99.95to100.00',
         'genotypes': {
             'NA19675': {
                 'sampleId': 'NA19675',
@@ -597,6 +965,7 @@ VARIANTS = [
         'familyGuids': ['F000001_1'],
         'genotypes': {
             'NA19679': {
+                'filters': ['artifact_prone_site'],
                 'sampleId': 'NA19679',
                 'ab': 0.0,
                 'gq': 99.0,
@@ -614,9 +983,10 @@ VARIANTS = [
         'xpos': 1248367227,
         'genomeVersion': '37',
         'liftedOverGenomeVersion': '',
-        'variantId': '12-48367227-TC-T',
+        'variantId': '1-248367227-TC-T',
         'transcripts': {'ENSG00000233653': {}},
         'familyGuids': ['F000002_2'],
+        'genotypeFilters': '',
         'genotypes': {}
     }
 ]
@@ -730,7 +1100,7 @@ PARSED_VARIANTS = [
         'alt': 'T',
         'chrom': '1',
         'bothsidesSupport': None,
-        'clinvar': {'clinicalSignificance': 'Pathogenic/Likely_pathogenic', 'alleleId': None, 'variationId': None, 'goldStars': None},
+        'clinvar': {'clinicalSignificance': 'Pathogenic/Likely_pathogenic', 'alleleId': None, 'variationId': None, 'goldStars': None, 'version': '2023-03-05'},
         'commonLowHeteroplasmy': None,
         'highConstraintRegion': None,
         'mitomapPathogenic': None,
@@ -750,10 +1120,8 @@ PARSED_VARIANTS = [
         'selectedMainTranscriptId': None,
         'originalAltAlleles': ['T'],
         'populations': {
-            'callset': {'an': 32, 'ac': 2, 'hom': None, 'af': 0.063, 'hemi': None, 'filter_af': None, 'het': None,
+            'callset': {'an': 32, 'ac': 2, 'hom': 3, 'af': 0.063, 'hemi': None, 'filter_af': None, 'het': None,
                         'id': None, 'max_hl': None},
-            'g1k': {'an': 0, 'ac': 0, 'hom': 0, 'af': 0.0, 'hemi': 0, 'filter_af': None, 'het': 0, 'id': None,
-                    'max_hl': None},
             'gnomad_genomes': {'an': 30946, 'ac': 4, 'hom': 0, 'af': 0.00012925741614425127, 'hemi': 0,
                                'filter_af': 0.0004590314436538903, 'het': 0, 'id': None, 'max_hl': None},
             'exac': {'an': 121308, 'ac': 8, 'hom': 0, 'af': 0.00006589, 'hemi': 0, 'filter_af': 0.0006726888333653661,
@@ -778,13 +1146,14 @@ PARSED_VARIANTS = [
                                    'hom': None, 'id': None, 'max_hl': None},
         },
         'pos': 248367227,
-        'predictions': {'splice_ai': 0.75, 'eigen': None, 'revel': None, 'mut_taster': None, 'fathmm': None,
+        'predictions': {'splice_ai': 0.75, 'eigen': None, 'revel': None, 'mut_taster': None, 'fathmm': 'D',
+                        'vest': '0.335', 'mut_pred': None,
                         'hmtvar': None, 'apogee': None, 'haplogroup_defining': None, 'mitotip': None,
-                        'polyphen': None, 'dann': None, 'sift': None, 'cadd': '25.9', 'metasvm': None, 'primate_ai': None,
-                        'gerp_rs': None, 'mpc': None, 'phastcons_100_vert': None, 'strvctvre': None,
-                        'splice_ai_consequence': None},
+                        'polyphen': None, 'dann': None, 'sift': None, 'cadd': '25.9', 'primate_ai': None,
+                        'mpc': None, 'strvctvre': None, 'splice_ai_consequence': None, 'gnomad_noncoding': 1.01272,},
         'ref': 'TC',
         'rsid': None,
+        'screenRegionType': 'dELS',
         'transcripts': {
             'ENSG00000135953': [TRANSCRIPT_3],
             'ENSG00000228198': [TRANSCRIPT_2],
@@ -802,7 +1171,7 @@ PARSED_VARIANTS = [
         'alt': 'G',
         'chrom': '2',
         'bothsidesSupport': None,
-        'clinvar': {'clinicalSignificance': None, 'alleleId': None, 'variationId': None, 'goldStars': None},
+        'clinvar': {'clinicalSignificance': None, 'alleleId': None, 'variationId': None, 'goldStars': None, 'version': '2023-03-05'},
         'commonLowHeteroplasmy': None,
         'highConstraintRegion': None,
         'mitomapPathogenic': None,
@@ -836,8 +1205,6 @@ PARSED_VARIANTS = [
         'populations': {
             'callset': {'an': 32, 'ac': 1, 'hom': None, 'af': 0.031, 'hemi': None, 'filter_af': None, 'het': None,
                         'id': None, 'max_hl': None},
-            'g1k': {'an': 0, 'ac': 0, 'hom': 0, 'af': 0.0, 'hemi': 0, 'filter_af': None, 'het': 0, 'id': None,
-                    'max_hl': None},
             'gnomad_genomes': {'an': 0, 'ac': 0, 'hom': 0, 'af': 0.0, 'hemi': 0, 'filter_af': None, 'het': 0,
                                'id': None, 'max_hl': None},
             'exac': {'an': 121336, 'ac': 6, 'hom': 0, 'af': 0.00004942, 'hemi': 0, 'filter_af': 0.000242306760358614,
@@ -863,13 +1230,14 @@ PARSED_VARIANTS = [
         },
         'pos': 103343353,
         'predictions': {
-            'hmtvar': None, 'apogee': None, 'haplogroup_defining': None, 'mitotip': None,
+            'hmtvar': None, 'apogee': None, 'haplogroup_defining': None, 'mitotip': None, 'gnomad_noncoding': None,
             'splice_ai': None, 'eigen': None, 'revel': None, 'mut_taster': None, 'fathmm': None, 'polyphen': None,
-            'dann': None, 'sift': None, 'cadd': None, 'metasvm': None, 'primate_ai': 1, 'gerp_rs': None,
-            'mpc': None, 'phastcons_100_vert': None, 'strvctvre': None, 'splice_ai_consequence': None,
+            'dann': None, 'sift': None, 'cadd': None, 'primate_ai': 1, 'vest': None, 'mut_pred': None,
+            'mpc': None, 'strvctvre': None, 'splice_ai_consequence': None,
         },
         'ref': 'GAGA',
         'rsid': None,
+        'screenRegionType': None,
         'transcripts': {
             'ENSG00000135953': [TRANSCRIPT_1],
             'ENSG00000228198': [TRANSCRIPT_2],
@@ -899,20 +1267,20 @@ PARSED_SV_VARIANT = {
         'I000004_hg00731': {
             'sampleId': 'HG00731', 'sampleType': 'WES', 'numAlt': -1, 'geneIds': ['ENSG00000228198'],
             'cn': 1, 'end': None, 'start': None, 'numExon': None, 'defragged': False, 'qs': 33, 'gq': None,
-            'prevCall': False, 'prevOverlap': False, 'newCall': True,
+            'prevCall': False, 'prevOverlap': False, 'newCall': True, 'prevNumAlt': None,
         },
         'I000005_hg00732': {
             'sampleId': 'HG00732', 'numAlt': -1, 'sampleType': None,  'geneIds': None, 'gq': None,
             'cn': 2, 'end': None, 'start': None, 'numExon': None, 'defragged': None, 'qs': None, 'isRef': True,
-            'prevCall': None, 'prevOverlap': None, 'newCall': None,
+            'prevCall': None, 'prevOverlap': None, 'newCall': None, 'prevNumAlt': None,
         },
         'I000006_hg00733': {
             'sampleId': 'HG00733', 'sampleType': 'WES', 'numAlt': -1,  'geneIds': None, 'gq': None,
             'cn': 2, 'end': 49045890, 'start': 49045987, 'numExon': 1, 'defragged': False, 'qs': 80,
-            'prevCall': False, 'prevOverlap': True, 'newCall': False,
+            'prevCall': False, 'prevOverlap': True, 'newCall': False, 'prevNumAlt': None,
         },
     },
-    'clinvar': {'clinicalSignificance': None, 'alleleId': None, 'variationId': None, 'goldStars': None},
+    'clinvar': {'clinicalSignificance': None, 'alleleId': None, 'variationId': None, 'goldStars': None, 'version': None},
     'hgmd': {'accession': None, 'class': None},
     'genomeVersion': '37',
     'genotypeFilters': '',
@@ -922,8 +1290,6 @@ PARSED_SV_VARIANT = {
     'populations': {
         'callset': {'an': None, 'ac': None, 'hom': None, 'af': None, 'hemi': None, 'filter_af': None, 'het': None,
                     'id': None, 'max_hl': None},
-        'g1k': {'an': None, 'ac': None, 'hom': None, 'af': None, 'hemi': None, 'filter_af': None, 'het': None,
-                'id': None, 'max_hl': None},
         'gnomad_genomes': {'an': None, 'ac': None, 'hom': None, 'af': None, 'hemi': None, 'filter_af': None,
                            'het': None, 'id': None, 'max_hl': None},
         'exac': {'an': None, 'ac': None, 'hom': None, 'af': None, 'hemi': None, 'filter_af': None, 'het': None,
@@ -949,12 +1315,12 @@ PARSED_SV_VARIANT = {
     },
     'pos': 49045487,
     'predictions': {'splice_ai': None, 'eigen': None, 'revel': None, 'mut_taster': None, 'fathmm': None,
-                    'hmtvar': None, 'apogee': None, 'haplogroup_defining': None, 'mitotip': None,
-                    'polyphen': None, 'dann': None, 'sift': None, 'cadd': None, 'metasvm': None, 'primate_ai': None,
-                    'gerp_rs': None, 'mpc': None, 'phastcons_100_vert': None, 'strvctvre': 0.374,
-                    'splice_ai_consequence': None},
+                    'hmtvar': None, 'apogee': None, 'haplogroup_defining': None, 'mitotip': None, 'gnomad_noncoding': None,
+                    'polyphen': None, 'dann': None, 'sift': None, 'cadd': None, 'primate_ai': None,
+                    'vest': None, 'mut_pred': None, 'mpc': None, 'strvctvre': 0.374, 'splice_ai_consequence': None},
     'ref': None,
     'rsid': None,
+    'screenRegionType': None,
     'transcripts': {
         'ENSG00000228198': [
             {
@@ -993,10 +1359,10 @@ PARSED_SV_WGS_VARIANT = {
         'I000018_na21234': {
             'gq': 33, 'sampleId': 'NA21234', 'numAlt': 1, 'geneIds': None,
             'cn': -1, 'end': None, 'start': None, 'numExon': None, 'defragged': None, 'qs': None, 'sampleType': 'WGS',
-            'prevCall': None, 'prevOverlap': None, 'newCall': None,
+            'prevCall': None, 'prevOverlap': None, 'newCall': None, 'prevNumAlt': 2,
         },
     },
-    'clinvar': {'clinicalSignificance': None, 'alleleId': None, 'variationId': None, 'goldStars': None},
+    'clinvar': {'clinicalSignificance': None, 'alleleId': None, 'variationId': None, 'goldStars': None, 'version': None},
     'hgmd': {'accession': None, 'class': None},
     'genomeVersion': '38',
     'genotypeFilters': '',
@@ -1009,8 +1375,6 @@ PARSED_SV_WGS_VARIANT = {
     'populations': {
         'callset': {'an': None, 'ac': None, 'hom': None, 'af': None, 'hemi': None, 'filter_af': None, 'het': None,
                     'id': None, 'max_hl': None},
-        'g1k': {'an': None, 'ac': None, 'hom': None, 'af': None, 'hemi': None, 'filter_af': None, 'het': None,
-                'id': None, 'max_hl': None},
         'gnomad_genomes': {'an': None, 'ac': None, 'hom': None, 'af': None, 'hemi': None, 'filter_af': None,
                            'het': None, 'id': None, 'max_hl': None},
         'exac': {'an': None, 'ac': None, 'hom': None, 'af': None, 'hemi': None, 'filter_af': None, 'het': None,
@@ -1021,7 +1385,7 @@ PARSED_SV_WGS_VARIANT = {
                    'id': None, 'max_hl': None},
         'sv_callset': {'an': 10088, 'ac': 7, 'hom': None, 'af': 0.000693825, 'hemi': None, 'filter_af': None,
                        'het': None, 'id': None, 'max_hl': None},
-        'gnomad_svs': {'ac': 0, 'af': 0.00679, 'an': 0, 'filter_af': None, 'hemi': 0, 'hom': 0, 'het': 0,
+        'gnomad_svs': {'ac': 22, 'af': 0.00679, 'an': 3240, 'filter_af': None, 'hemi': 0, 'hom': 0, 'het': 0,
                        'id': 'gnomAD-SV_v2.1_BND_1_1', 'max_hl': None},
         'gnomad_mito': {'ac': None, 'af': None, 'an': None, 'filter_af': None,
                         'hemi': None, 'het': None, 'hom': None, 'id': None, 'max_hl': None},
@@ -1036,12 +1400,13 @@ PARSED_SV_WGS_VARIANT = {
     },
     'pos': 49045387,
     'predictions': {'splice_ai': None, 'eigen': None, 'revel': None, 'mut_taster': None, 'fathmm': None,
+                    'vest': None, 'mut_pred': None,
                     'hmtvar': None, 'apogee': None, 'haplogroup_defining': None, 'mitotip': None,
-                    'polyphen': None, 'dann': None, 'sift': None, 'cadd': None, 'metasvm': None, 'primate_ai': None,
-                    'gerp_rs': None, 'mpc': None, 'phastcons_100_vert': None, 'strvctvre': None,
-                    'splice_ai_consequence': None},
+                    'polyphen': None, 'dann': None, 'sift': None, 'cadd': None, 'primate_ai': None,
+                    'mpc': None, 'strvctvre': None, 'gnomad_noncoding': None, 'splice_ai_consequence': None},
     'ref': None,
     'rsid': None,
+    'screenRegionType': None,
     'transcripts': {
         'ENSG00000228198': [
             {
@@ -1050,6 +1415,20 @@ PARSED_SV_WGS_VARIANT = {
                 'geneId': 'ENSG00000228198'
             },
         ],
+        'ENSG00000228199': [
+            {
+                'geneId': 'ENSG00000228199',
+                'geneSymbol': 'FBXO28',
+                'majorConsequence': 'MSV_EXON_OVERLAP'
+            }
+        ],
+        'ENSG00000228201': [
+            {
+                'geneId': 'ENSG00000228201',
+                'geneSymbol': 'FAM131C',
+                'majorConsequence': 'INTRAGENIC_EXON_DUP'
+            }
+        ]
     },
     'variantId': 'prefix_19107_CPX',
     'xpos': 2049045387,
@@ -1068,7 +1447,7 @@ PARSED_MITO_VARIANT = {
     'alt': 'A',
     'bothsidesSupport': None,
     'chrom': 'M',
-    'clinvar': {'alleleId': None, 'clinicalSignificance': ['Likely_pathogenic'], 'goldStars': None, 'variationId': None},
+    'clinvar': {'alleleId': None, 'clinicalSignificance': 'Likely_pathogenic', 'goldStars': None, 'variationId': None, 'version': None},
     'commonLowHeteroplasmy': False,
     'cpxIntervals': None,
     'end': 10195,
@@ -1076,9 +1455,9 @@ PARSED_MITO_VARIANT = {
     'genomeVersion': '37',
     'genotypeFilters': '',
     'genotypes':
-        {'I000006_hg00733':
+        {'I000004_hg00731':
              {'contamination': 0.0, 'dp': 5139.0, 'gq': 60.0, 'hl': 1.0, 'mitoCn': 319.03225806451616, 'numAlt': 2,
-              'sampleId': 'HG00733', 'sampleType': 'WGS'}},
+              'sampleId': 'HG00731', 'sampleType': 'WES'}},
     'hgmd': {'accession': None, 'class': None},
     'highConstraintRegion': True,
     'mainTranscriptId': 'ENST00000361227',
@@ -1090,8 +1469,6 @@ PARSED_MITO_VARIANT = {
               'het': None, 'hom': None, 'id': None, 'max_hl': None},
          'exac': {'ac': None, 'af': None, 'an': None, 'filter_af': None, 'hemi': None,
               'het': None, 'hom': None, 'id': None, 'max_hl': None},
-         'g1k': {'ac': None, 'af': None, 'an': None, 'filter_af': None, 'hemi': None,
-                 'het': None, 'hom': None, 'id': None, 'max_hl': None},
          'gnomad_exomes': {'ac': None, 'af': None, 'an': None, 'filter_af': None,
                            'hemi': None, 'het': None, 'hom': None, 'id': None, 'max_hl': None},
          'gnomad_genomes': {'ac': None, 'af': None, 'an': None, 'filter_af': None,
@@ -1115,13 +1492,13 @@ PARSED_MITO_VARIANT = {
         },
     'pos': 10195,
     'predictions': {'hmtvar': 0.71, 'apogee': 0.42, 'cadd': None, 'dann': None, 'eigen': None, 'fathmm': 'T',
-                    'gerp_rs': '5.07', 'haplogroup_defining': None, 'metasvm': None, 'mitotip': None,
-                    'mpc': None, 'mut_taster': 'N', 'phastcons_100_vert': '0.958000', 'polyphen': None,
+                    'haplogroup_defining': None, 'mitotip': None, 'mpc': None, 'mut_taster': 'N', 'polyphen': None,
                     'primate_ai': None, 'revel': None, 'sift': 'D', 'splice_ai': None, 'splice_ai_consequence': None,
-                    'strvctvre': None},
+                    'vest': None, 'mut_pred': None, 'strvctvre': None, 'gnomad_noncoding': None,},
     'ref': 'C',
     'rg37LocusEnd': None,
     'rsid': None,
+    'screenRegionType': None,
     'selectedMainTranscriptId': None,
     'svType': None,
     'svTypeDetail': None,
@@ -1139,7 +1516,24 @@ PARSED_MITO_VARIANT = {
     'xpos': 25000010195
 }
 
-GOOGLE_API_TOKEN_URL = 'https://oauth2.googleapis.com/token'
-GOOGLE_ACCESS_TOKEN_URL = 'https://accounts.google.com/o/oauth2/token'
+PARSED_COMPOUND_HET_VARIANTS_MULTI_PROJECT = deepcopy(PARSED_VARIANTS)
+PARSED_COMPOUND_HET_VARIANTS_MULTI_PROJECT[1].update({
+    'familyGuids': ['F000003_3'],
+    'mainTranscriptId': TRANSCRIPT_2['transcriptId'],
+    'selectedMainTranscriptId': None,
+})
+PARSED_COMPOUND_HET_VARIANTS_MULTI_PROJECT[1]['transcripts']['ENSG00000135953'][0]['majorConsequence'] = 'frameshift_variant'
+for variant in PARSED_COMPOUND_HET_VARIANTS_MULTI_PROJECT:
+    variant['_sort'][0] += 100
+    variant['familyGuids'].append('F000011_11')
+    variant['genotypes'].update({
+        'I000015_na20885': {
+            'ab': 0.631, 'ad': None, 'gq': 99, 'sampleId': 'NA20885', 'numAlt': 1, 'dp': 50, 'pl': None,
+            'sampleType': 'WES',
+        },
+    })
 
-GOOGLE_TOKEN_RESULT = '{"access_token":"ya29.c.EXAMPLE","expires_in":3599,"token_type":"Bearer"}'
+GOOGLE_API_TOKEN_URL = 'https://oauth2.googleapis.com/token'  # nosec
+GOOGLE_ACCESS_TOKEN_URL = 'https://accounts.google.com/o/oauth2/token'  # nosec
+
+GOOGLE_TOKEN_RESULT = '{"access_token":"ya29.c.EXAMPLE","expires_in":3599,"token_type":"Bearer"}'  # nosec

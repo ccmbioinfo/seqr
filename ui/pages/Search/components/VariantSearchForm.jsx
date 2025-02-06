@@ -6,16 +6,17 @@ import { getLocusListIsLoading } from 'redux/selectors'
 import VariantSearchFormContainer from 'shared/components/panel/search/VariantSearchFormContainer'
 import { SaveSearchButton } from './SavedSearch'
 import VariantSearchFormContent from './VariantSearchFormContent'
-import { getIntitialSearch } from '../selectors'
+import { getIntitialSearch, getMultiProjectFamilies } from '../selectors'
 
-const VariantSearchForm = React.memo(({ history, initialSearch, contentLoading }) => (
+const VariantSearchForm = React.memo(({ history, initialSearch, contentLoading, noEditProjects, match }) => (
   <div>
     <VariantSearchFormContainer
       history={history}
       initialValues={initialSearch}
       loading={contentLoading}
+      match={match}
     >
-      <VariantSearchFormContent />
+      <VariantSearchFormContent noEditProjects={noEditProjects} />
       <SaveSearchButton />
     </VariantSearchFormContainer>
   </div>
@@ -23,8 +24,10 @@ const VariantSearchForm = React.memo(({ history, initialSearch, contentLoading }
 
 VariantSearchForm.propTypes = {
   history: PropTypes.object,
+  match: PropTypes.object,
   initialSearch: PropTypes.object,
   contentLoading: PropTypes.bool,
+  noEditProjects: PropTypes.bool,
 }
 
 const mapStateToProps = (state, ownProps) => ({
@@ -33,3 +36,11 @@ const mapStateToProps = (state, ownProps) => ({
 })
 
 export default connect(mapStateToProps)(VariantSearchForm)
+
+const mapNoEditProjectStateToProps = (state, ownProps) => ({
+  noEditProjects: true,
+  initialSearch: getMultiProjectFamilies(state, ownProps),
+  contentLoading: getLocusListIsLoading(state),
+})
+
+export const NoEditProjectsVariantSearchForm = connect(mapNoEditProjectStateToProps)(VariantSearchForm)

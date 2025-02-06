@@ -145,23 +145,24 @@ const callsetChange = (onChange, initialValues) => val => onChange(
   { ...initialValues, [THIS_CALLSET_FREQUENCY]: val, [SV_CALLSET_FREQUENCY]: val },
 )
 
-const freqChange = (onChange, initialValues) => val => onChange(FREQUENCIES.filter(
-  ({ name }) => name !== THIS_CALLSET_FREQUENCY && name !== SV_CALLSET_FREQUENCY,
-).reduce((acc, { name }) => ({ ...acc, [name]: val }), initialValues || {}))
+const freqChange = (onChange, initialValues) => val => onChange(FREQUENCIES.reduce((acc, { name }) => ({
+  ...acc, [name]: name !== THIS_CALLSET_FREQUENCY && name !== SV_CALLSET_FREQUENCY ? val : initialValues[name],
+}), {}))
 
-export const HeaderFrequencyFilter = ({ value, onChange, ...props }) => {
+export const HeaderFrequencyFilter = ({ value, onChange, esEnabled, ...props }) => {
   const { callset, sv_callset: svCallset, ...freqValues } = value || {}
   const headerValue = freqValues ? formatHeaderValue(freqValues) : {}
 
   const onCallsetChange = callsetChange(onChange, freqValues)
 
   const onFreqChange = freqChange(onChange, value)
+  const callsetTitle = esEnabled ? 'Callset' : 'seqr'
 
   return (
     <FrequencyFilter {...props} value={headerValue} onChange={onFreqChange} homHemi inlineAF>
-      <AfFilter value={callset} onChange={onCallsetChange} inline label="Callset AF" />
+      <AfFilter value={callset} onChange={onCallsetChange} inline label={`${callsetTitle} AF`} />
       <FrequencyIntegerInput
-        label="Callset AC"
+        label={`${callsetTitle} AC`}
         field="ac"
         nullField="af"
         value={callset}
@@ -175,4 +176,5 @@ export const HeaderFrequencyFilter = ({ value, onChange, ...props }) => {
 HeaderFrequencyFilter.propTypes = {
   value: PropTypes.object,
   onChange: PropTypes.func,
+  esEnabled: PropTypes.bool,
 }

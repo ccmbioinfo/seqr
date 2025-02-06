@@ -12,6 +12,7 @@ import {
 } from 'redux/selectors'
 import DeleteButton from 'shared/components/buttons/DeleteButton'
 import UpdateButton from 'shared/components/buttons/UpdateButton'
+import SendEmailButton from 'shared/components/buttons/SendEmailButton'
 import { BooleanCheckbox, BaseSemanticInput } from 'shared/components/form/Inputs'
 import { SubmissionGeneVariants, Phenotypes } from 'shared/components/panel/MatchmakerPanel'
 import BaseFieldView from 'shared/components/panel/view-fields/BaseFieldView'
@@ -28,7 +29,12 @@ import {
 import { camelcaseToTitlecase } from 'shared/utils/stringUtils'
 
 import {
-  loadMmeMatches, updateMmeSubmission, updateMmeSubmissionStatus, sendMmeContactEmail, updateMmeContactNotes,
+  searchMmeMatches,
+  getMmeMatches,
+  updateMmeSubmission,
+  updateMmeSubmissionStatus,
+  sendMmeContactEmail,
+  updateMmeContactNotes,
 } from '../reducers'
 import {
   getMatchmakerMatchesLoading,
@@ -37,7 +43,8 @@ import {
   getMmeResultsBySubmission,
   getMmeDefaultContactEmail,
   getMatchmakerContactNotes,
-  getVariantUniqueId,
+  getVariantGeneId,
+  getCurrentProject,
 } from '../selectors'
 import SelectSavedVariantsTable from './SelectSavedVariantsTable'
 
@@ -121,7 +128,6 @@ const mapPhenotypeStateToProps = (state, ownProps) => ({
 
 const EditPhenotypesTable = connect(mapPhenotypeStateToProps)(BaseEditPhenotypesTable)
 
-const CONTACT_URL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}(,\s*[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{1,4})*$/i
 const SUBMISSION_EDIT_FIELDS = [
   { ...MATCHMAKER_CONTACT_NAME_FIELD, name: 'contactName' },
   { ...MATCHMAKER_CONTACT_URL_FIELD, name: 'contactHref' },
@@ -133,7 +139,7 @@ const SUBMISSION_EDIT_FIELDS = [
     includeSelectedRowData: true,
     parse: val => Object.values(val || {}).filter(v => v),
     format: value => (value || []).reduce(
-      (acc, variant) => ({ ...acc, [variant.variantId || getVariantUniqueId(variant)]: variant }), {},
+      (acc, variant) => ({ ...acc, [getVariantGeneId(variant)]: variant }), {},
     ),
   },
   {
@@ -145,45 +151,20 @@ const SUBMISSION_EDIT_FIELDS = [
   },
 ]
 
-const CONTACT_FIELDS = [
-  {
-    name: 'to',
-    label: 'Send To:',
-    validate: val => (CONTACT_URL_REGEX.test(val) ? undefined : 'Invalid Contact Email'),
-  },
-  { name: 'subject', label: 'Subject:' },
-  { name: 'body', component: BaseSemanticInput, inputType: 'TextArea', rows: 12 },
-]
-
-const BaseContactHostButton = React.memo(({ defaultContactEmail, onSubmit }) => (
-  <UpdateButton
-    onSubmit={onSubmit}
-    initialValues={defaultContactEmail}
-    formFields={CONTACT_FIELDS}
-    modalTitle={`Send Contact Email for Patient ${defaultContactEmail.patientId}`}
-    modalId={`contactEmail-${defaultContactEmail.patientId}`}
-    buttonText="Contact Host"
-    editIconName="mail"
-    showErrorPanel
-    submitButtonText="Send"
-    buttonFloated="right"
-  />
-))
-
-BaseContactHostButton.propTypes = {
-  defaultContactEmail: PropTypes.object,
-  onSubmit: PropTypes.func,
-}
-
 const mapContactButtonStateToProps = (state, ownProps) => ({
-  defaultContactEmail: getMmeDefaultContactEmail(state, ownProps),
+  defaultEmail: getMmeDefaultContactEmail(state, ownProps),
+  draftOnly: !getCurrentProject(state).isAnalystProject,
+  editRecipient: true,
+  buttonText: 'Contact Host',
+  idField: 'patientId',
+  modalTitleDetail: patientId => ` for Patient ${patientId}`,
 })
 
 const mapContactDispatchToProps = {
   onSubmit: sendMmeContactEmail,
 }
 
-const ContactHostButton = connect(mapContactButtonStateToProps, mapContactDispatchToProps)(BaseContactHostButton)
+const ContactHostButton = connect(mapContactButtonStateToProps, mapContactDispatchToProps)(SendEmailButton)
 
 const contactedLabel = (val) => {
   if (val.hostContacted) {
@@ -463,7 +444,7 @@ const BaseMatchmakerIndividual = React.memo((
             defaultSortColumn="createdDate"
             defaultSortDescending
             columns={DISPLAY_FIELDS}
-            data={mmeResults.active}
+            data={mmeResults?.active}
             loading={loading}
             emptyContent="No matches found"
             downloadFileName={`MME_matches_${individual.displayName}`}
@@ -510,8 +491,8 @@ const mapStateToProps = (state, ownProps) => ({
 })
 
 const mapDispatchToProps = (dispatch, ownProps) => ({
-  load: () => dispatch(loadMmeMatches(ownProps.individual.mmeSubmissionGuid, false)),
-  searchMme: () => dispatch(loadMmeMatches(ownProps.individual.mmeSubmissionGuid, true)),
+  load: () => dispatch(getMmeMatches(ownProps.individual.mmeSubmissionGuid)),
+  searchMme: () => dispatch(searchMmeMatches(ownProps.individual.mmeSubmissionGuid)),
   onSubmit: values => dispatch(updateMmeSubmission({
     ...values,
     submissionGuid: ownProps.individual.mmeSubmissionGuid,

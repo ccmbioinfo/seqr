@@ -1,9 +1,8 @@
 import React from 'react'
 import PropTypes from 'prop-types'
 import styled from 'styled-components'
-import { Table, Icon, Popup, Visibility } from 'semantic-ui-react'
+import { Table, Popup, Visibility } from 'semantic-ui-react'
 import { connect } from 'react-redux'
-import { withRouter } from 'react-router'
 
 import DataLoader from 'shared/components/DataLoader'
 import { ExportTableButtonContent, DownloadButton } from 'shared/components/buttons/ExportTableButton'
@@ -17,16 +16,12 @@ import {
 } from '../../selectors'
 import { loadFamilies, loadProjectExportData } from '../../reducers'
 import { FamilyDetail } from '../FamilyPage'
+import CollapsableLayout from './CollapsableLayout'
 import TableHeaderRow from './header/TableHeaderRow'
 
 const ExportContainer = styled.span`
   float: right;
   padding-bottom: 15px;
-`
-
-const ToggleIcon = styled(Icon).attrs({ size: 'large', link: true, name: 'dropdown' })`
-  position: relative;
-  z-index: 1;
 `
 
 const EmptyCell = styled(Table.Cell)`
@@ -38,6 +33,10 @@ const EmptyCell = styled(Table.Cell)`
 // Allows dropdowns to be visible inside table cell
 const OverflowCell = styled(Table.Cell)`
   overflow: visible !important;
+  
+  td {
+    overflow: visible !important;
+  }
 `
 
 class FamilyTableRow extends React.PureComponent {
@@ -48,48 +47,22 @@ class FamilyTableRow extends React.PureComponent {
     detailFields: PropTypes.arrayOf(PropTypes.object),
     noDetailFields: PropTypes.arrayOf(PropTypes.object),
     showVariantDetails: PropTypes.bool,
-    showDetails: PropTypes.bool,
   }
 
-  state = { showDetails: null, isVisible: false }
-
-  toggle = () => {
-    const { showDetails } = this.props
-    this.setState(prevState => (
-      { showDetails: !(prevState.showDetails === null ? showDetails : prevState.showDetails) }
-    ))
-  }
+  state = { isVisible: false }
 
   handleOnScreen = () => {
     this.setState({ isVisible: true })
   }
 
   render() {
-    const {
-      familyGuid, showVariantDetails, detailFields, noDetailFields, tableName, showDetails: initialShowDetails,
-    } = this.props
-    const { showDetails, isVisible } = this.state
-    const showFamilyDetails = showDetails === null ? initialShowDetails : showDetails
+    const { isVisible } = this.state
+
     return (
       <Table.Row>
-        <Table.Cell collapsing verticalAlign="top">
-          {detailFields && noDetailFields &&
-            <ToggleIcon rotated={showFamilyDetails ? undefined : 'counterclockwise'} onClick={this.toggle} />}
-        </Table.Cell>
-        <OverflowCell>
+        <OverflowCell width={16}>
           <Visibility fireOnMount onOnScreen={this.handleOnScreen}>
-            {isVisible && (
-              <FamilyDetail
-                key={familyGuid}
-                familyGuid={familyGuid}
-                showFamilyPageLink
-                showVariantDetails={showVariantDetails}
-                tableName={tableName}
-                fields={showFamilyDetails ? detailFields : noDetailFields}
-                compact={!showFamilyDetails}
-                disableEdit={!showFamilyDetails}
-              />
-            )}
+            {isVisible && <CollapsableLayout layoutComponent={FamilyDetail} showFamilyPageLink {...this.props} />}
           </Visibility>
         </OverflowCell>
       </Table.Row>
@@ -98,8 +71,32 @@ class FamilyTableRow extends React.PureComponent {
 
 }
 
+const BaseFamilyTableRows = ({ visibleFamilies, ...props }) => (
+  visibleFamilies.length > 0 ? visibleFamilies.map(family => (
+    <FamilyTableRow
+      key={family.familyGuid}
+      familyGuid={family.familyGuid}
+      {...props}
+    />
+  )) : (
+    <Table.Row>
+      <EmptyCell content="0 families found" />
+    </Table.Row>
+  )
+)
+
+const mapFamilyRowsStateToProps = (state, ownProps) => ({
+  visibleFamilies: getVisibleFamiliesInSortedOrder(state, ownProps),
+})
+
+BaseFamilyTableRows.propTypes = {
+  visibleFamilies: PropTypes.arrayOf(PropTypes.object).isRequired,
+}
+
+const FamilyTableRows = connect(mapFamilyRowsStateToProps)(BaseFamilyTableRows)
+
 const FamilyTable = React.memo(({
-  visibleFamilies, load, loading, headerStatus, exportUrls, noDetailFields, tableName, showVariantDetails,
+  load, loading, headerStatus, exportUrls, noDetailFields, tableName, showVariantDetails,
   loadExportData, exportDataLoading, ...props
 }) => (
   <DataLoader load={load} loading={false} content>
@@ -133,26 +130,20 @@ const FamilyTable = React.memo(({
         fields={noDetailFields}
         tableName={tableName}
         showVariantDetails={showVariantDetails}
-        analysisGroupGuid={props.match.params.analysisGroupGuid}
+        analysisGroupGuid={props.analysisGroupGuid}
       />
     </Table>
-    <Table striped compact attached="bottom">
+    <Table striped compact fixed attached="bottom">
       <Table.Body>
         {loading && <TableLoading />}
-        {!loading && (visibleFamilies.length > 0 ? visibleFamilies.map(family => (
-          <FamilyTableRow
-            key={family.familyGuid}
-            familyGuid={family.familyGuid}
+        {!loading && (
+          <FamilyTableRows
             noDetailFields={noDetailFields}
             showVariantDetails={showVariantDetails}
             tableName={tableName}
             {...props}
           />
-        )) : (
-          <Table.Row>
-            <EmptyCell content="0 families found" />
-          </Table.Row>
-        ))}
+        )}
       </Table.Body>
       <Table.Footer>
         <Table.Row>
@@ -167,7 +158,6 @@ const FamilyTable = React.memo(({
 export { FamilyTable as FamilyTableComponent }
 
 FamilyTable.propTypes = {
-  visibleFamilies: PropTypes.arrayOf(PropTypes.object).isRequired,
   loading: PropTypes.bool,
   load: PropTypes.func,
   exportDataLoading: PropTypes.bool,
@@ -177,11 +167,10 @@ FamilyTable.propTypes = {
   showVariantDetails: PropTypes.bool,
   noDetailFields: PropTypes.arrayOf(PropTypes.object),
   tableName: PropTypes.string,
-  match: PropTypes.object,
+  analysisGroupGuid: PropTypes.string,
 }
 
 const mapStateToProps = (state, ownProps) => ({
-  visibleFamilies: getVisibleFamiliesInSortedOrder(state, ownProps),
   loading: getFamiliesLoading(state) || getProjectOverviewIsLoading(state),
   exportDataLoading: getFamiliesLoading(state) || getIndivdualsLoading(state),
   exportUrls: getProjectExportUrls(state, ownProps),
@@ -192,4 +181,4 @@ const mapDispatchToProps = {
   loadExportData: loadProjectExportData,
 }
 
-export default withRouter(connect(mapStateToProps, mapDispatchToProps)(FamilyTable))
+export default connect(mapStateToProps, mapDispatchToProps)(FamilyTable)

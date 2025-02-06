@@ -3,6 +3,7 @@
 export const PROJECT_GUID = 'R0237_1000_genomes_demo'
 export const FAMILY_GUID = 'F011652_1'
 export const ANALYSIS_GROUP_GUID = 'AG0000183_test_group'
+export const DYNAMIC_ANALYSIS_GROUP_GUID = 'DAG0000183_test'
 export const SEARCH_HASH = 'd380ed0fd28c3127d07a64ea2ba907d7'
 export const GENE_ID = 'ENSG00000228198'
 export const SEARCH = { projectFamilies: [{ projectGuid: PROJECT_GUID, familyGuid: FAMILY_GUID}], search: {} }
@@ -18,7 +19,11 @@ export const LOCUS_LIST = {
   locusListGuid: LOCUS_LIST_GUID,
   name: "2017 Monogenic IBD Gene List",
   numEntries: 60,
-  parsedItems: { items:  [{ geneId: 'ENSG00000164458' }], itemMap: { 'TTN': { geneId: 'ENSG00000164458', symbol: 'TTN' } } }
+  parsedItems: { items:  [{ geneId: 'ENSG00000164458' }], itemMap: { 'TTN': { geneId: 'ENSG00000164458', symbol: 'TTN' } } },
+  intervals: [
+    {'chrom': '1', 'end': 7300, 'genomeVersion': '37', 'locusListGuid': 'LL00132_2017_monogenic_ibd_gen', 'locusListIntervalGuid': 'LLI0000012_test_list_edit4545_', 'start': 7200},
+    {'chrom': '3', 'end': 3000, 'genomeVersion': '37', 'locusListGuid': 'LL00132_2017_monogenic_ibd_gen', 'locusListIntervalGuid': 'LLI0000013_a_new_list325_3000', 'start': 25},
+  ]
 }
 
 export const STATE = {
@@ -100,6 +105,7 @@ export const STATE = {
       ],
       sampleGuids: [],
       sex: 'F',
+      familyGuid: FAMILY_GUID,
     },
     I021475_na19675: {
       affected: 'A',
@@ -154,7 +160,7 @@ export const STATE = {
     S2310658_wal_mc16200_mc16203: {
       createdDate: "2018-03-30T11:50:40.079Z",
       elasticsearchIndex: "CMG_MYOSEQ",
-      datasetType: "VARIANTS",
+      datasetType: "SNV_INDEL",
       individualGuid: "I021476_na19678",
       loadedDate: "2018-03-13T13:25:21.551Z",
       projectGuid: PROJECT_GUID,
@@ -178,7 +184,7 @@ export const STATE = {
     S2310656_wal_mc16200_mc16203: {
       createdDate: "2018-03-30T11:50:40.079Z",
       elasticsearchIndex: "CMG_MYOSEQ",
-      datasetType: "VARIANTS",
+      datasetType: "SNV_INDEL",
       individualGuid: "I021476_na19678",
       loadedDate: "2018-03-13T13:25:21.551Z",
       projectGuid: PROJECT_GUID,
@@ -191,7 +197,7 @@ export const STATE = {
       createdDate: "2018-03-30T11:50:40.079Z",
       elasticsearchIndex: null,
       datasetName: null,
-      datasetType: "VARIANTS",
+      datasetType: "SNV_INDEL",
       individualGuid: "I021476_na19678",
       loadedDate: "2018-03-13T13:25:21.551Z",
       projectGuid: PROJECT_GUID,
@@ -210,8 +216,29 @@ export const STATE = {
       name: "Test Group",
       projectGuid:PROJECT_GUID,
     },
+    [DYNAMIC_ANALYSIS_GROUP_GUID]: {
+      analysisGroupGuid: DYNAMIC_ANALYSIS_GROUP_GUID,
+      createdDate: '2018-08-09T18:53:24.207Z',
+      name: 'Test Dynamic Group',
+      projectGuid: null,
+      criteria: { analysisStatus: ['Rncc', 'Rcpc'], analysedBy: ['SHOW_NOT_ANALYSED'] },
+    },
+    DAG0000184_test_2: {
+      analysisGroupGuid: 'DAG0000184_test_2',
+      createdDate: '2018-08-09T18:53:24.207Z',
+      name: 'Test Dynamic Group',
+      projectGuid: PROJECT_GUID,
+      criteria: { firstSample: ['SHOW_DATA_LOADED'], analysisStatus: ['I', 'P', 'C'] },
+    },
   },
   locusListsByGuid: { [LOCUS_LIST_GUID]: LOCUS_LIST },
+  rnaSeqDataByIndividual: { I021474_na19679: {
+    outliers: {ENSG00000136758: {geneId:  "ENSG00000136758", isSignificant: true, pAdjust: 0.000225907356686287, pValue: 2.69828505929319e-9, tissueType: "M", zScore: 5.62}},
+    spliceOutliers: { ENSG00000136758: [
+      {chrom: "10", deltaPsi: 0.56, end: 27114400, geneId: "ENSG00000136758", isSignificant: true, pValue: 2.1234e-10, rareDiseaseSamplesTotal: 171, rareDiseaseSamplesWithJunction: 1, readCount: 1208, start: 27114300, strand: "*", tissueType: "F", type: "psi5", zScore: 2.96},
+      {chrom: "11", deltaPsi: 0.56, end: 27114400, geneId: "ENSG00000136758", isSignificant: true, pValue: 2.1234e-10, rareDiseaseSamplesTotal: 171, rareDiseaseSamplesWithJunction: 1, readCount: 1208, start: 27114300, strand: "*", tissueType: "F", type: "psi5", zScore: 2.96},
+    ]},
+  }},
   projectsByGuid: {
     [PROJECT_GUID] : {
       createdDate: '2016-05-16T05:37:08.634Z',

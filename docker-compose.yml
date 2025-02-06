@@ -8,6 +8,7 @@ services:
       - PGPORT=5433
       - POSTGRES_PASSWORD=docker-compose-postgres-password
     volumes:
+      - ./data/postgres_init/initdb.sql:/docker-entrypoint-initdb.d/initdb.sql
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
       test: pg_isready -h postgres -U postgres
@@ -16,7 +17,7 @@ services:
       retries: 100
 
   redis:
-    image: gcr.io/seqr-project/redis:gcloud-prod
+    image: redis:6.2.7
     healthcheck:
       test: redis-cli ping
       interval: 3s

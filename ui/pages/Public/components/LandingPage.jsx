@@ -5,10 +5,10 @@ import PropTypes from 'prop-types'
 import styled from 'styled-components'
 import { Segment, Header, Grid, Button, List } from 'semantic-ui-react'
 
-import { getGoogleLoginEnabled } from 'redux/selectors'
+import { getOauthLoginProvider } from 'redux/selectors'
 import { VerticalSpacer } from 'shared/components/Spacers'
 import { SeqrPaperLink } from 'shared/components/page/Footer'
-import { LOCAL_LOGIN_URL, GOOGLE_LOGIN_URL, LOCAL_REGISTER_URL } from 'shared/utils/constants'
+import { LOCAL_LOGIN_URL, LOCAL_REGISTER_URL } from 'shared/utils/constants'
 
 const PageSegment = styled(Segment).attrs({ padded: 'very' })`
   padding-left: 20% !important;
@@ -27,15 +27,42 @@ const REGISTER_BUTTON_PROPS = {
   label: 'Don\'t have an account?', content: 'Sign Up', primary: true, size: 'big', labelPosition: 'left',
 }
 
-const LandingPage = ({ googleLoginEnabled }) => (
+export const SeqrAvailability = ({ hasFootnote }) => (
+  <List ordered>
+    <List.Item>
+      Through the &nbsp;
+      <Anchor href="https://anvilproject.org">AnVIL platform</Anchor>
+      {hasFootnote && '*'}
+      &nbsp; where requests can be placed for loading a joint called vcf into seqr. To learn more, see the&nbsp;
+      <Anchor href="https://www.youtube.com/watch?v=TvYz_VI9vN0&ab_channel=BroadInstitute">video tutorial</Anchor>
+    </List.Item>
+    <List.Item>
+      As a collaborator providing samples for sequencing within the &nbsp;
+      <Anchor href="https://cmg.broadinstitute.org">Broad Institute Center for Mendelian Genomics</Anchor>
+      , part of the &nbsp;
+      <Anchor href="https://gregorconsortium.org" target="blank">GREGoR consortium</Anchor>
+    </List.Item>
+    <List.Item>
+      On GitHub as an &nbsp;
+      <Anchor href="http://github.com/broadinstitute/seqr">open source project</Anchor>
+      &nbsp;for download and local installation
+    </List.Item>
+  </List>
+)
+
+SeqrAvailability.propTypes = {
+  hasFootnote: PropTypes.bool,
+}
+
+const LandingPage = ({ oauthLoginProvider }) => (
   <Segment.Group>
     <PageSegment textAlign="center" size="massive" secondary>
       <Header size="huge" content={<i>seqr</i>} />
       <VerticalSpacer height={20} />
       An open source software platform for rare disease genomics
       <VerticalSpacer height={40} />
-      {googleLoginEnabled ?
-        <Button as="a" href={GOOGLE_LOGIN_URL} {...LOGIN_BUTTON_PROPS} /> :
+      {oauthLoginProvider ?
+        <Button as="a" href={`/login/${oauthLoginProvider}`} {...LOGIN_BUTTON_PROPS} /> :
         <Button as={Link} to={LOCAL_LOGIN_URL} {...LOGIN_BUTTON_PROPS} />}
       <VerticalSpacer height={10} />
       <Button as={Link} to={LOCAL_REGISTER_URL} {...REGISTER_BUTTON_PROPS} />
@@ -76,23 +103,7 @@ const LandingPage = ({ googleLoginEnabled }) => (
         &nbsp; is available through three methods:
       </Header>
       <VerticalSpacer height={10} />
-      <List ordered>
-        <List.Item>
-          Available for all collaborators within the &nbsp;
-          <Anchor href="https://cmg.broadinstitute.org">Broad Institute Center for Mendelian Genomics</Anchor>
-          &nbsp; or Mendelian Genomics Research Center with data pre-loaded into projects
-        </List.Item>
-        <List.Item>
-          Available for use on the &nbsp;
-          <Anchor href="https://anvilproject.org">AnVIL platform</Anchor>
-          &nbsp; where requests can be placed for loading a joint called vcf into seqr
-        </List.Item>
-        <List.Item>
-          Available on GitHub as an &nbsp;
-          <Anchor href="http://github.com/broadinstitute/seqr">open source project</Anchor>
-          &nbsp;for download and local installation
-        </List.Item>
-      </List>
+      <SeqrAvailability />
     </PageSegment>
     <PageSegment secondary>
       <List bulleted>
@@ -117,11 +128,11 @@ const LandingPage = ({ googleLoginEnabled }) => (
 )
 
 LandingPage.propTypes = {
-  googleLoginEnabled: PropTypes.bool,
+  oauthLoginProvider: PropTypes.string,
 }
 
 const mapStateToProps = state => ({
-  googleLoginEnabled: getGoogleLoginEnabled(state),
+  oauthLoginProvider: getOauthLoginProvider(state),
 })
 
 export default connect(mapStateToProps)(LandingPage)

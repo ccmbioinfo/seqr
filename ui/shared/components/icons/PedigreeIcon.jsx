@@ -2,8 +2,13 @@ import React from 'react'
 import PropTypes from 'prop-types'
 
 import { Icon, Popup } from 'semantic-ui-react'
+import styled from 'styled-components'
 
-import { SEX_LOOKUP, AFFECTED_LOOKUP } from 'shared/utils/constants'
+import { SEX_LOOKUP, SIMPLIFIED_SEX_LOOKUP, AFFECTED_LOOKUP } from 'shared/utils/constants'
+
+const RotatedIcon = styled(Icon)`
+  transform: rotate(45deg);
+`
 
 const ICON_LOOKUP = {
 
@@ -22,18 +27,18 @@ const ICON_LOOKUP = {
   FN: { icon: 'circle outline' },
   FU: { icon: 'question circle outline' },
 
-  UA: { icon: 'clone' },
-  UN: { icon: 'clone outline' },
+  UA: { iconGroup: <RotatedIcon name="square" /> },
+  UN: { iconGroup: <RotatedIcon name="square outline" /> },
   UU: { icon: 'question' },
 }
 
 const PedigreeIcon = React.memo((props) => {
-  const iconProps = ICON_LOOKUP[`${props.sex}${props.affected}`]
+  const iconProps = ICON_LOOKUP[`${SIMPLIFIED_SEX_LOOKUP[props.sex]}${props.affected}`]
   return (
     <Popup
-      trigger={iconProps.iconGroup || (
+      trigger={(
         <span>
-          <Icon name={iconProps.icon || 'warning sign'} />
+          {iconProps.iconGroup || <Icon name={iconProps.icon || 'warning sign'} />}
           {props.label}
         </span>
       )}

@@ -22,7 +22,7 @@ export const VARIANT = {
   genomeVersion: "37",
   geneIds: ['ENSG00000228198'],
   genotypes: {
-    NA19675: {
+    NA19675: [{
       ab: 1,
       ad: "0,74",
       alleles: ["T", "T"],
@@ -31,7 +31,18 @@ export const VARIANT = {
       gq: 99,
       numAlt: 2,
       pl: "358,132,0",
-    },
+      sampleType: "WES",
+    }, {
+      ab: 1,
+      ad: "0,74",
+      alleles: ["T", "T"],
+      dp: "74",
+      filter: "pass",
+      gq: 99,
+      numAlt: 2,
+      pl: "358,132,0",
+      sampleType: "WGS",
+    }],
     NA19678: {
       ab: 0,
       ad: "77,0",
@@ -329,10 +340,11 @@ export const STATE1 = {
   },
   rnaSeqDataByIndividual: {
     I021474_na19679: {
-      outliers: { ENSG00000228198: { isSignificant: true } },
+      outliers: { ENSG00000228198: [{ isSignificant: true }] },
       tpms: { ENSG00000228198: { tpm: 1.03, geneId: 'ENSG00000228198' } },
     },
   },
+  phenotypeGeneScoresByIndividual: {},
   mmeSubmissionsByGuid: {},
   project: {
     createdDate: '2016-05-16T05:37:08.634Z',
@@ -347,6 +359,9 @@ export const STATE1 = {
     projectGuid: 'R0237_1000_genomes_demo',
   },
   user: USER,
+  meta: {
+    anvilLoadingDelayDate: null,
+  },
   caseReviewTableState: {
     familiesFilter: 'ALL',
     familiesSortOrder: 'FAMILY_NAME',

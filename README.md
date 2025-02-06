@@ -3,7 +3,7 @@
 ![Unit Tests](https://github.com/broadinstitute/seqr/workflows/Unit%20Tests/badge.svg?branch=master) | ![Local Install Tests](https://github.com/broadinstitute/seqr/workflows/local%20install%20tests/badge.svg?branch=master)
 
 seqr is a web-based tool for rare disease genomics.
-This repository contains code that underlies the [Broad seqr instance](http://seqr.broadinstitute.org) and other seqr deployments. To check for any active incidents occuring on the Broad seqr instance, check [here](/INCIDENTS.md)
+This repository contains code that underlies the [Broad seqr instance](http://seqr.broadinstitute.org) and other seqr deployments. To check for any active incidents occurring on the Broad seqr instance, check [here](/INCIDENTS.md)
 
 ## Technical Overview
 
@@ -19,8 +19,12 @@ seqr consists of the following components:
 
 The seqr production instance runs on Google Kubernetes Engine (GKE) and data is loaded using Google Dataproc Spark clusters. 
 
-On-prem installs can be created using docker-compose:
-**[Local installs using docker-compose](deploy/LOCAL_INSTALL.md)**  
+On-prem installs using the elasticsearch backend can be created using docker-compose:
+ **[Local installs using docker-compose](deploy/LOCAL_INSTALL.md)**
+
+On-prem installs using the `hail` backend can be created using **[helm](deploy/LOCAL_INSTALL_HELM.md)**
+
+To help you decide which backend is best suited for your needs, please refer to the discussion post [announcing the `hail` backend](https://github.com/broadinstitute/seqr/discussions/4531).
 
 To set up seqr for local development, see instructions **[here](deploy/LOCAL_DEVELOPMENT_INSTALL.md)**  
 

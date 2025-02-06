@@ -8,6 +8,7 @@ import { Grid, Popup, Loader, Label } from 'semantic-ui-react'
 
 import { loadGene, updateGeneNote } from 'redux/rootReducer'
 import { getGenesIsLoading, getGenesById, getUser } from 'redux/selectors'
+import { getDecipherGeneLink } from 'shared/utils/constants'
 import { SectionHeader, ColoredLabel } from '../../StyledComponents'
 import DataLoader from '../../DataLoader'
 import NoteListFieldView from '../view-fields/NoteListFieldView'
@@ -146,9 +147,20 @@ const DosageSensitivity = ({ gene, clingenField, scoreFields, sensitivityType, t
       scores={gene.cnSensitivity}
       fields={scoreFields}
       rankDescription="intolerant of LoF mutations"
-      note={`These are a score under development by the Talkowski lab that predict whether a gene is ${sensitivityType}
-      based on large chromosomal microarray data set analysis. Scores >${threshold} are considered to have high
-      likelihood to be ${sensitivityType}.`}
+      note={(
+        <span>
+          These are a score developed by the Talkowski lab [
+          <a href="https://pubmed.ncbi.nlm.nih.gov/35917817" target="_blank" rel="noreferrer">
+            Collins et al. 2022
+          </a>
+          ] that predict whether a gene is &nbsp;
+          {sensitivityType}
+          &nbsp; based on large chromosomal microarray data set analysis. Scores &gt;
+          {threshold}
+          &nbsp; are considered to have high likelihood to be &nbsp;
+          {sensitivityType}
+        </span>
+      )}
     />
   </div>
 )
@@ -161,8 +173,11 @@ DosageSensitivity.propTypes = {
   gene: PropTypes.object,
 }
 
-const HAPLOINSUFFICIENT_FIELDS = [{ field: 'phi', label: 'pHI-score' }]
-const TRIPLOSENSITIVE_FIELDS = [{ field: 'pts', label: 'pTS-score' }]
+export const HI_THRESHOLD = 0.86
+export const TS_THRESHOLD = 0.94
+export const SHET_THRESHOLD = 0.1
+const HAPLOINSUFFICIENT_FIELDS = [{ field: 'phi', label: 'pHaplo' }]
+const TRIPLOSENSITIVE_FIELDS = [{ field: 'pts', label: 'pTriplo' }]
 const STAT_DETAILS = [
   { title: 'Coding Size', content: gene => `${((gene.codingRegionSizeGrch38 || gene.codingRegionSizeGrch37) / 1000).toPrecision(2)}kb` },
   {
@@ -197,6 +212,24 @@ const STAT_DETAILS = [
     'of how likely the gene is to be intolerant of loss-of-function mutations.',
   },
   {
+    title: 'Shet',
+    scoreField: 'sHet',
+    fields: [
+      { field: 'postMean', label: 'post_mean' },
+    ],
+    note: (
+      <span>
+        This score was developed by the Pritchard lab [
+        <a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10245655" target="_blank" rel="noreferrer">
+          Zeng et al 2023
+        </a>
+        ] to predict gene constraint based on functional and evolutionary information. Scores &gt;
+        {SHET_THRESHOLD}
+        &nbsp; are considered to have high likelihood to be under extreme selection.
+      </span>
+    ),
+  },
+  {
     title: 'Haploinsufficient',
     content: gene => (
       <DosageSensitivity
@@ -204,7 +237,7 @@ const STAT_DETAILS = [
         clingenField="haploinsufficiency"
         scoreFields={HAPLOINSUFFICIENT_FIELDS}
         sensitivityType="haploinsufficient"
-        threshold="0.84"
+        threshold={HI_THRESHOLD}
       />
     ),
   },
@@ -216,7 +249,7 @@ const STAT_DETAILS = [
         clingenField="triplosensitivity"
         scoreFields={TRIPLOSENSITIVE_FIELDS}
         sensitivityType="triplosensitive"
-        threshold="0.993"
+        threshold={TS_THRESHOLD}
       />
     ),
   },
@@ -298,13 +331,14 @@ const GeneDetailContent = React.memo(({ gene, user, updateGeneNote: dispatchUpda
     { title: 'NCBI Gene', link: `http://www.ncbi.nlm.nih.gov/gene/?term=${gene.geneId}`, description: 'NCBI\'s gene information resource' },
     { title: 'GTEx Portal', link: `http://www.gtexportal.org/home/gene/${gene.geneId}`, description: 'Reference of public data for this gene' },
     { title: 'Monarch', link: `http://monarchinitiative.org/gene/ENSEMBL:${gene.geneId}`, description: 'Cross-species gene and phenotype resource' },
-    { title: 'Decipher', link: `https://decipher.sanger.ac.uk/gene/${gene.geneId}/overview/protein-genomic-info`, description: 'DatabasE of genomiC varIation and Phenotype in Humans using Ensembl Resources' },
+    { title: 'Decipher', link: getDecipherGeneLink(gene), description: 'DatabasE of genomiC varIation and Phenotype in Humans using Ensembl Resources' },
     { title: 'UniProt', link: `http://www.uniprot.org/uniprot?query=${gene.geneId}+AND(reviewed:true)+AND(organism_id:9606)`, description: 'Protein sequence and functional information' },
     { title: 'Geno2MP', link: `https://geno2mp.gs.washington.edu/Geno2MP/#/gene/${gene.geneSymbol}/gene/0/0/0`, description: 'Genotype to Mendelian Phenotype' },
-    { title: 'gnomAD', link: `https://gnomad.broadinstitute.org/gene/${gene.geneId}?dataset=gnomad_r3`, description: 'Genome Aggregation Database' },
-    { title: 'primAD', link: `http://primad.basespace.illumina.com/gene/${gene.geneSymbol}?dataset=gnomad_r3`, description: 'Primate Genome Aggregation Database' },
+    { title: 'gnomAD', link: `https://gnomad.broadinstitute.org/gene/${gene.geneId}?dataset=gnomad_r4`, description: 'Genome Aggregation Database' },
+    { title: 'primAD', link: `http://primad.basespace.illumina.com/gene/${gene.geneSymbol}`, description: 'Primate Genome Aggregation Database' },
     gene.mgiMarkerId ? { title: 'MGI', link: `http://www.informatics.jax.org/marker/${gene.mgiMarkerId}`, description: 'Mouse Genome Informatics' } : null,
     gene.mgiMarkerId ? { title: 'IMPC', link: `https://www.mousephenotype.org/data/genes/${gene.mgiMarkerId}`, description: 'International Mouse Phenotyping Consortium' } : null,
+    { title: 'KEGG', link: `https://www.kegg.jp/kegg-bin/search_pathway_text?keyword=${gene.geneSymbol}&viewImage=true`, description: 'Pathway maps representing known molecular interaction' },
     gene.clinGen ? { title: 'ClinGen', link: gene.clinGen.href, description: 'ClinGen Dosage Sensitivity' } : null,
     { title: 'ClinVar', link: `https://www.ncbi.nlm.nih.gov/clinvar?term=${gene.geneSymbol}[gene]`, description: 'Aggregated information about human genomic variation' },
     user.isAnalyst ? { title: 'HGMD', link: `https://my.qiagendigitalinsights.com/bbp/view/hgmd/pro/gene.php?gene=${gene.geneSymbol}`, description: 'Human Gene Mutation Database ' } : null,

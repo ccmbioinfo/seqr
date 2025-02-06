@@ -1,5 +1,5 @@
 import React from 'react'
-import { Form } from 'semantic-ui-react'
+import { Icon, Form, Label, Message } from 'semantic-ui-react'
 import flatten from 'lodash/flatten'
 
 import { validators } from '../components/form/FormHelpers'
@@ -13,13 +13,25 @@ import {
   BaseSemanticInput,
 } from '../components/form/Inputs'
 
-import { stripMarkdown } from './stringUtils'
+import { stripMarkdown, snakecaseToTitlecase, camelcaseToTitlecase } from './stringUtils'
 import { ColoredIcon } from '../components/StyledComponents'
+import HpoPanel from '../components/panel/HpoPanel'
 
 export const ANVIL_URL = 'https://anvil.terra.bio'
-export const GOOGLE_LOGIN_URL = '/login/google-oauth2'
 export const LOCAL_LOGIN_URL = '/login'
 export const LOCAL_REGISTER_URL = '/register'
+
+export const VCF_DOCUMENTATION_URL = 'https://storage.googleapis.com/seqr-reference-data/seqr-vcf-info.pdf'
+
+export const LoadDataVCFMessage = isAnvil => (
+  <Message info compact>
+    In order to load your data to seqr, you must
+    {isAnvil ? ' have a joint called VCF available in your workspace. ' : ' use a joint called VCF.'}
+    For more information about generating and validating this file,
+    see &nbsp;
+    <b><a href={VCF_DOCUMENTATION_URL} target="_blank" rel="noreferrer">this documentation</a></b>
+  </Message>
+)
 
 export const GENOME_VERSION_37 = '37'
 export const GENOME_VERSION_38 = '38'
@@ -111,31 +123,30 @@ export const MATCHMAKER_CONTACT_URL_FIELD = {
 
 // SAMPLES
 
-export const DATASET_TYPE_VARIANT_CALLS = 'VARIANTS'
+export const DATASET_TYPE_SNV_INDEL_CALLS = 'SNV_INDEL'
 export const DATASET_TYPE_SV_CALLS = 'SV'
 export const DATASET_TYPE_MITO_CALLS = 'MITO'
+
+export const DATA_TYPE_TPM = 'T'
+export const DATA_TYPE_EXPRESSION_OUTLIER = 'E'
+export const DATA_TYPE_SPLICE_OUTLIER = 'S'
 
 export const DATASET_TITLE_LOOKUP = {
   [DATASET_TYPE_SV_CALLS]: ' SV',
   [DATASET_TYPE_MITO_CALLS]: ' Mitochondria',
+  ONT_SNV_INDEL: ' ONT',
+  [DATA_TYPE_TPM]: ' TPM',
+  [DATA_TYPE_EXPRESSION_OUTLIER]: ' Expression Outlier',
+  [DATA_TYPE_SPLICE_OUTLIER]: ' Splice Outlier',
 }
 
 export const SAMPLE_TYPE_EXOME = 'WES'
 export const SAMPLE_TYPE_GENOME = 'WGS'
-export const SAMPLE_TYPE_RNA = 'RNA'
 
 export const SAMPLE_TYPE_OPTIONS = [
   { value: SAMPLE_TYPE_EXOME, text: 'Exome' },
   { value: SAMPLE_TYPE_GENOME, text: 'Genome' },
-  { value: SAMPLE_TYPE_RNA, text: 'RNA-seq' },
 ]
-
-export const SAMPLE_TYPE_LOOKUP = SAMPLE_TYPE_OPTIONS.reduce(
-  (acc, opt) => ({
-    ...acc,
-    ...{ [opt.value]: opt },
-  }), {},
-)
 
 // ANALYSIS STATUS
 
@@ -144,14 +155,17 @@ const FAMILY_STATUS_SOLVED_KNOWN_GENE_KNOWN_PHENOTYPE = 'S_kgfp'
 const FAMILY_STATUS_SOLVED_KNOWN_GENE_DIFFERENT_PHENOTYPE = 'S_kgdp'
 const FAMILY_STATUS_SOLVED_NOVEL_GENE = 'S_ng'
 const FAMILY_STATUS_EXTERNAL_SOLVE = 'ES'
+const FAMILY_STATUS_PROBABLE_SOLVE = 'PB'
 const FAMILY_STATUS_STRONG_CANDIDATE_KNOWN_GENE_KNOWN_PHENOTYPE = 'Sc_kgfp'
 const FAMILY_STATUS_STRONG_CANDIDATE_KNOWN_GENE_DIFFERENT_PHENOTYPE = 'Sc_kgdp'
 const FAMILY_STATUS_STRONG_CANDIDATE_NOVEL_GENE = 'Sc_ng'
 const FAMILY_STATUS_REVIEWED_PURSUING_CANDIDATES = 'Rcpc'
 const FAMILY_STATUS_REVIEWED_NO_CLEAR_CANDIDATE = 'Rncc'
 const FAMILY_STATUS_CLOSED = 'C'
+const FAMILY_STATUS_PARTIAL_SOLVE = 'P'
 const FAMILY_STATUS_ANALYSIS_IN_PROGRESS = 'I'
 const FAMILY_STATUS_WAITING_FOR_DATA = 'Q'
+const FAMILY_STATUS_LOADING_FAILED = 'F'
 const FAMILY_STATUS_NO_DATA = 'N'
 
 const DEPRECATED_FAMILY_ANALYSIS_STATUS_OPTIONS = [
@@ -162,14 +176,17 @@ export const SELECTABLE_FAMILY_ANALYSIS_STATUS_OPTIONS = [
   { value: FAMILY_STATUS_SOLVED_KNOWN_GENE_DIFFERENT_PHENOTYPE, color: '#4CAF50', name: 'Solved - gene linked to different phenotype' },
   { value: FAMILY_STATUS_SOLVED_NOVEL_GENE, color: '#4CAF50', name: 'Solved - novel gene' },
   { value: FAMILY_STATUS_EXTERNAL_SOLVE, color: '#146917', name: 'External Solve' },
+  { value: FAMILY_STATUS_PROBABLE_SOLVE, color: '#ACD657', name: 'Probably Solved' },
   { value: FAMILY_STATUS_STRONG_CANDIDATE_KNOWN_GENE_KNOWN_PHENOTYPE, color: '#CDDC39', name: 'Strong candidate - known gene for phenotype' },
   { value: FAMILY_STATUS_STRONG_CANDIDATE_KNOWN_GENE_DIFFERENT_PHENOTYPE, color: '#CDDC39', name: 'Strong candidate - gene linked to different phenotype' },
   { value: FAMILY_STATUS_STRONG_CANDIDATE_NOVEL_GENE, color: '#CDDC39', name: 'Strong candidate - novel gene' },
   { value: FAMILY_STATUS_REVIEWED_PURSUING_CANDIDATES, color: '#EB9F38', name: 'Reviewed, currently pursuing candidates' },
   { value: FAMILY_STATUS_REVIEWED_NO_CLEAR_CANDIDATE, color: '#EF5350', name: 'Reviewed, no clear candidate' },
   { value: FAMILY_STATUS_CLOSED, color: '#9c0502', name: 'Closed, no longer under analysis' },
+  { value: FAMILY_STATUS_PARTIAL_SOLVE, color: '#288582', name: 'Partial Solve - Analysis in Progress' },
   { value: FAMILY_STATUS_ANALYSIS_IN_PROGRESS, color: '#4682B4', name: 'Analysis in Progress' },
   { value: FAMILY_STATUS_WAITING_FOR_DATA, color: '#FFC107', name: 'Waiting for data' },
+  { value: FAMILY_STATUS_LOADING_FAILED, color: '#ba4c12', name: 'Loading failed' },
   { value: FAMILY_STATUS_NO_DATA, color: '#646464', name: 'No data expected' },
 ]
 export const ALL_FAMILY_ANALYSIS_STATUS_OPTIONS = [
@@ -180,6 +197,11 @@ export const FAMILY_ANALYSIS_STATUS_LOOKUP = ALL_FAMILY_ANALYSIS_STATUS_OPTIONS.
   (acc, tag) => ({ [tag.value]: tag, ...acc }), {},
 )
 
+export const SOLVED_FAMILY_STATUS_OPTIONS = new Set([
+  FAMILY_STATUS_SOLVED_KNOWN_GENE_KNOWN_PHENOTYPE, FAMILY_STATUS_SOLVED_KNOWN_GENE_DIFFERENT_PHENOTYPE,
+  FAMILY_STATUS_SOLVED_NOVEL_GENE, FAMILY_STATUS_EXTERNAL_SOLVE, FAMILY_STATUS_SOLVED,
+])
+
 export const SNP_DATA_TYPE = 'SNP'
 export const FAMILY_ANALYSED_BY_DATA_TYPES = [
   [SNP_DATA_TYPE, 'WES/WGS'],
@@ -188,6 +210,19 @@ export const FAMILY_ANALYSED_BY_DATA_TYPES = [
   ['MT', 'Mitochondrial'],
   ['STR', 'STR'],
 ]
+
+export const FAMILY_EXTERNAL_DATA_OPTIONS = [
+  { value: 'M', color: '#3c9f6d', name: 'Methylation' },
+  { value: 'P', color: '#1135cc', name: 'PacBio lrGS' },
+  { value: 'R', color: '#5c2672', name: 'PacBio RNA' },
+  { value: 'L', color: '#6583EC', name: 'ONT lrGS' },
+  { value: 'O', color: '#644e96', name: 'ONT RNA' },
+  { value: 'B', color: '#d0672d', name: 'BioNano' },
+]
+
+export const FAMILY_EXTERNAL_DATA_LOOKUP = FAMILY_EXTERNAL_DATA_OPTIONS.reduce(
+  (acc, tag) => ({ [tag.value]: tag, ...acc }), {},
+)
 
 // SUCCESS STORY
 
@@ -235,30 +270,15 @@ export const FAMILY_FIELD_INTERNAL_NOTES = 'caseReviewNotes'
 export const FAMILY_FIELD_INTERNAL_SUMMARY = 'caseReviewSummary'
 export const FAMILY_FIELD_FIRST_SAMPLE = 'firstSample'
 export const FAMILY_FIELD_CODED_PHENOTYPE = 'codedPhenotype'
-export const FAMILY_FIELD_OMIM_NUMBER = 'postDiscoveryOmimNumber'
+export const FAMILY_FIELD_MONDO_ID = 'mondoId'
+export const FAMILY_FIELD_DISCOVERY_MONDO_ID = 'postDiscoveryMondoId'
+export const FAMILY_FIELD_OMIM_NUMBERS = 'postDiscoveryOmimNumbers'
 export const FAMILY_FIELD_PMIDS = 'pubmedIds'
 export const FAMILY_FIELD_PEDIGREE = 'pedigreeImage'
 export const FAMILY_FIELD_CREATED_DATE = 'createdDate'
 export const FAMILY_FIELD_ANALYSIS_GROUPS = 'analysisGroups'
-
-export const FAMILY_FIELD_NAME_LOOKUP = {
-  [FAMILY_FIELD_DESCRIPTION]: 'Family Description',
-  [FAMILY_FIELD_ANALYSIS_GROUPS]: 'Analysis Groups',
-  [FAMILY_FIELD_ANALYSIS_STATUS]: 'Analysis Status',
-  [FAMILY_FIELD_ASSIGNED_ANALYST]: 'Assigned Analyst',
-  [FAMILY_FIELD_ANALYSED_BY]: 'Analysed By',
-  [FAMILY_FIELD_SUCCESS_STORY_TYPE]: 'Success Story Type',
-  [FAMILY_FIELD_SUCCESS_STORY]: 'Success Story',
-  [FAMILY_FIELD_FIRST_SAMPLE]: 'Data Loaded?',
-  [FAMILY_FIELD_CASE_NOTES]: 'Case Notes',
-  [FAMILY_FIELD_ANALYSIS_NOTES]: 'Analysis Notes',
-  [FAMILY_FIELD_MME_NOTES]: 'Matchmaker Notes',
-  [FAMILY_FIELD_CODED_PHENOTYPE]: 'Coded Phenotype',
-  [FAMILY_FIELD_OMIM_NUMBER]: 'Post-discovery OMIM #',
-  [FAMILY_FIELD_PMIDS]: 'Publications on this discovery',
-  [FAMILY_FIELD_INTERNAL_NOTES]: 'Internal Notes',
-  [FAMILY_FIELD_INTERNAL_SUMMARY]: 'Internal Summary',
-}
+export const FAMILY_FIELD_SAVED_VARIANTS = 'savedVariants'
+export const FAMILY_FIELD_EXTERNAL_DATA = 'externalData'
 
 export const FAMILY_NOTES_FIELDS = [
   { id: FAMILY_FIELD_CASE_NOTES, noteType: 'C' },
@@ -276,21 +296,135 @@ export const FAMILY_MAIN_FIELDS = [
 export const FAMILY_DETAIL_FIELDS = [
   ...FAMILY_MAIN_FIELDS,
   { id: FAMILY_FIELD_ANALYSED_BY },
+  { id: FAMILY_FIELD_EXTERNAL_DATA },
   { id: FAMILY_FIELD_SUCCESS_STORY_TYPE },
   { id: FAMILY_FIELD_SUCCESS_STORY },
   ...FAMILY_NOTES_FIELDS,
   { id: FAMILY_FIELD_CODED_PHENOTYPE },
-  { id: FAMILY_FIELD_OMIM_NUMBER },
+  { id: FAMILY_FIELD_MONDO_ID },
+  { id: FAMILY_FIELD_DISCOVERY_MONDO_ID },
+  { id: FAMILY_FIELD_OMIM_NUMBERS },
   { id: FAMILY_FIELD_PMIDS },
 ]
 
-// INDIVIDUAL FIELDS
+export const FAMILY_FIELD_NAME_LOOKUP = {
+  ...FAMILY_DETAIL_FIELDS.reduce((acc, field) => ({ ...acc, [field.id]: camelcaseToTitlecase(field.id) }), {}),
+  [FAMILY_FIELD_DESCRIPTION]: 'Family Description',
+  [FAMILY_FIELD_FIRST_SAMPLE]: 'Data Loaded?',
+  [FAMILY_FIELD_MME_NOTES]: 'Matchmaker Notes',
+  [FAMILY_FIELD_CODED_PHENOTYPE]: 'Phenotype Description',
+  [FAMILY_FIELD_MONDO_ID]: 'MONDO ID',
+  [FAMILY_FIELD_DISCOVERY_MONDO_ID]: 'Post-discovery MONDO ID',
+  [FAMILY_FIELD_OMIM_NUMBERS]: 'Post-discovery OMIM #',
+  [FAMILY_FIELD_PMIDS]: 'Publications on this discovery',
+  [FAMILY_FIELD_INTERNAL_NOTES]: 'Internal Notes',
+  [FAMILY_FIELD_INTERNAL_SUMMARY]: 'Internal Summary',
+}
 
+const SHOW_DATA_LOADED = 'SHOW_DATA_LOADED'
+const SHOW_ASSIGNED_TO_ME = 'SHOW_ASSIGNED_TO_ME'
+const SHOW_ANALYSED_BY_ME = 'SHOW_ANALYSED_BY_ME'
+const SHOW_ANALYSED = 'SHOW_ANALYSED'
+const SHOW_NOT_ANALYSED = 'SHOW_NOT_ANALYSED'
+
+const hasMatchingSampleFilter = isMatchingSample => (family, user, samplesByFamily) => (
+  (family.sampleTypes || samplesByFamily[family.familyGuid] || []).some(
+    sample => sample.isActive && isMatchingSample(sample),
+  ))
+
+export const ASSIGNED_TO_ME_FILTER = {
+  value: SHOW_ASSIGNED_TO_ME,
+  name: 'Assigned To Me',
+  createFilter: (family, user) => (
+    family.assignedAnalyst ? family.assignedAnalyst.email === user.email : null),
+}
+
+export const CATEGORY_FAMILY_FILTERS = {
+  [FAMILY_FIELD_ANALYSIS_STATUS]: [
+    ...SELECTABLE_FAMILY_ANALYSIS_STATUS_OPTIONS.map(option => ({
+      ...option,
+      createFilter: family => family.analysisStatus === option.value,
+    })),
+  ],
+  [FAMILY_FIELD_ANALYSED_BY]: [
+    ASSIGNED_TO_ME_FILTER,
+    {
+      value: SHOW_ANALYSED_BY_ME,
+      name: 'Analysed By Me',
+      analysedByFilter: ({ createdBy }, user) => createdBy === (user.displayName || user.email),
+    },
+    {
+      value: SHOW_ANALYSED,
+      name: 'Analysed',
+      analysedByFilter: () => true,
+    },
+    {
+      value: SHOW_NOT_ANALYSED,
+      name: 'Not Analysed',
+      requireNoAnalysedBy: true,
+      analysedByFilter: () => true,
+    },
+    ...FAMILY_ANALYSED_BY_DATA_TYPES.map(([type, typeDisplay]) => ({
+      value: type,
+      name: typeDisplay,
+      category: 'Data Type',
+      analysedByFilter: ({ dataType }) => dataType === type,
+    })),
+    {
+      value: 'yearSinceAnalysed',
+      name: '>1 Year',
+      category: 'Analysis Date',
+      requireNoAnalysedBy: true,
+      analysedByFilter: ({ lastModifiedDate }) => (
+        (new Date()).setFullYear(new Date().getFullYear() - 1) < new Date(lastModifiedDate)
+      ),
+    },
+  ],
+  [FAMILY_FIELD_FIRST_SAMPLE]: [
+    {
+      value: SHOW_DATA_LOADED,
+      name: 'Data Loaded',
+      createFilter: hasMatchingSampleFilter(() => true),
+    },
+    {
+      value: `${SHOW_DATA_LOADED}_RNA`,
+      name: 'Data Loaded - RNA',
+      createFilter: family => family.hasRna,
+    },
+    ...[DATASET_TYPE_SV_CALLS, DATASET_TYPE_MITO_CALLS].map(dataType => ({
+      value: `${SHOW_DATA_LOADED}_${dataType}`,
+      name: `Data Loaded -${DATASET_TITLE_LOOKUP[dataType]}`,
+      createFilter: hasMatchingSampleFilter(
+        ({ datasetType }) => datasetType === dataType,
+      ),
+    })),
+    {
+      value: `${SHOW_DATA_LOADED}_PHENO`,
+      name: 'Data Loaded - Phenotype Prioritization',
+      createFilter: family => family.hasPhenotypePrioritization,
+    },
+  ],
+}
+
+// INDIVIDUAL FIELDS
+const SEX_MALE = 'M'
+const SEX_FEMALE = 'F'
+const SEX_UNKNOWN = 'U'
+const MALE_ANEUPLOIDIES = ['XXY', 'XYY']
+const FEMALE_ANEUPLOIDIES = ['XXX', 'X0']
 export const SEX_OPTIONS = [
   { value: 'M', text: 'Male' },
   { value: 'F', text: 'Female' },
   { value: 'U', text: '?' },
+  ...MALE_ANEUPLOIDIES.map(value => ({ value, text: `Male (${value})` })),
+  ...FEMALE_ANEUPLOIDIES.map(value => ({ value, text: `Female (${value})` })),
 ]
+
+export const SIMPLIFIED_SEX_LOOKUP = {
+  ...[SEX_MALE, ...MALE_ANEUPLOIDIES].reduce((acc, val) => ({ ...acc, [val]: SEX_MALE }), {}),
+  ...[SEX_FEMALE, ...FEMALE_ANEUPLOIDIES].reduce((acc, val) => ({ ...acc, [val]: SEX_FEMALE }), {}),
+  [SEX_UNKNOWN]: SEX_UNKNOWN,
+}
 
 export const SEX_LOOKUP = SEX_OPTIONS.reduce(
   (acc, opt) => ({
@@ -346,6 +480,51 @@ const PROBAND_RELATIONSHIP_LOOKUP = PROBAND_RELATIONSHIP_OPTIONS.reduce(
   }), {},
 )
 
+const ANALYTE_TYPE_OPTIONS = [
+  { value: 'D', text: 'DNA' },
+  { value: 'R', text: 'RNA' },
+  { value: 'B', text: 'blood plasma' },
+  { value: 'F', text: 'frozen whole blood' },
+  { value: 'H', text: 'high molecular weight DNA' },
+  { value: 'U', text: 'urine' },
+]
+
+const ANALYTE_TYPE_LOOKUP = ANALYTE_TYPE_OPTIONS.reduce(
+  (acc, opt) => ({
+    ...acc,
+    ...{ [opt.value]: opt.text },
+  }), {},
+)
+
+const BIOSAMPLE_OPTIONS = [
+  { value: 'T', text: 'UBERON:0000479 (tissue)' },
+  { value: 'NT', text: 'UBERON:0003714 (neural tissue)' },
+  { value: 'S', text: 'UBERON:0001836 (saliva)' },
+  { value: 'SE', text: 'UBERON:0001003 (skin epidermis)' },
+  { value: 'MT', text: 'UBERON:0002385 (muscle tissue)' },
+  { value: 'WB', text: 'UBERON:0000178 (whole blood)' },
+  { value: 'BM', text: 'UBERON:0002371 (bone marrow)' },
+  { value: 'CC', text: 'UBERON:0006956 (buccal mucosa)' },
+  { value: 'CF', text: 'UBERON:0001359 (cerebrospinal fluid)' },
+  { value: 'U', text: 'UBERON:0001088 (urine)' },
+  { value: 'NE', text: 'UBERON:0019306 (nose epithelium)' },
+  { value: 'EM', text: 'UBERON:0005291 (embryonic tissue)' },
+  { value: 'CE', text: 'UBERON:0002037 (cerebellum tissue)' },
+  { value: 'CA', text: 'UBERON:0001133 (cardiac tissue)' },
+  { value: 'IP', text: 'CL:0000034 (iPSC)' },
+  { value: 'NP', text: 'CL:0011020 (iPSC NPC)' },
+  { value: 'MO', text: 'CL:0000576 (monocytes - PBMCs)' },
+  { value: 'LY', text: 'CL:0000542 (lymphocytes - LCLs)' },
+  { value: 'FI', text: 'CL:0000057 (fibroblasts)' },
+]
+
+const BIOSAMPLE_LOOKUP = BIOSAMPLE_OPTIONS.reduce(
+  (acc, opt) => ({
+    ...acc,
+    ...{ [opt.value]: opt.text },
+  }), {},
+)
+
 export const INDIVIDUAL_FIELD_ID = 'individualId'
 export const INDIVIDUAL_FIELD_PATERNAL_ID = 'paternalId'
 export const INDIVIDUAL_FIELD_MATERNAL_ID = 'maternalId'
@@ -353,6 +532,13 @@ export const INDIVIDUAL_FIELD_SEX = 'sex'
 export const INDIVIDUAL_FIELD_AFFECTED = 'affected'
 export const INDIVIDUAL_FIELD_NOTES = 'notes'
 export const INDIVIDUAL_FIELD_PROBAND_RELATIONSHIP = 'probandRelationship'
+export const INDIVIDUAL_FIELD_FEATURES = 'features'
+export const INDIVIDUAL_FIELD_FILTER_FLAGS = 'filterFlags'
+export const INDIVIDUAL_FIELD_POP_FILTERS = 'popPlatformFilters'
+export const INDIVIDUAL_FIELD_SV_FLAGS = 'svFlags'
+export const INDIVIDUAL_FIELD_ANALYTE_TYPE = 'analyteType'
+export const INDIVIDUAL_FIELD_PRIMARY_BIOSAMPLE = 'primaryBiosample'
+export const INDIVIDUAL_FIELD_TISSUE_AFFECTED = 'tissueAffectedStatus'
 
 export const INDIVIDUAL_FIELD_CONFIGS = {
   [FAMILY_FIELD_ID]: { label: 'Family ID' },
@@ -363,14 +549,14 @@ export const INDIVIDUAL_FIELD_CONFIGS = {
     label: 'Sex',
     format: sex => SEX_LOOKUP[sex],
     width: 3,
-    description: 'Male or Female, leave blank if unknown',
-    formFieldProps: { component: RadioGroup, options: SEX_OPTIONS },
+    description: 'Male, Female, or Unknown',
+    formFieldProps: { component: Select, options: SEX_OPTIONS },
   },
   [INDIVIDUAL_FIELD_AFFECTED]: {
     label: 'Affected Status',
     format: affected => AFFECTED_LOOKUP[affected],
     width: 4,
-    description: 'Affected or Unaffected, leave blank if unknown',
+    description: 'Affected, Unaffected, or Unknown',
     formFieldProps: { component: RadioGroup, options: AFFECTED_OPTIONS },
   },
   [INDIVIDUAL_FIELD_NOTES]: { label: 'Notes', format: stripMarkdown, description: 'free-text notes related to this individual' },
@@ -381,12 +567,29 @@ export const INDIVIDUAL_FIELD_CONFIGS = {
     format: relationship => PROBAND_RELATIONSHIP_LOOKUP[relationship],
     formFieldProps: { component: Select, options: PROBAND_RELATIONSHIP_OPTIONS, search: true },
   },
+  [INDIVIDUAL_FIELD_ANALYTE_TYPE]: {
+    label: 'Analyte Type',
+    description: `One of: ${ANALYTE_TYPE_OPTIONS.map(({ text }) => text).join(', ')}`,
+    format: val => ANALYTE_TYPE_LOOKUP[val],
+    formFieldProps: { component: Select, options: ANALYTE_TYPE_OPTIONS },
+  },
+  [INDIVIDUAL_FIELD_PRIMARY_BIOSAMPLE]: {
+    label: 'Primary Biosample',
+    description: `One of: ${BIOSAMPLE_OPTIONS.map(({ text }) => text).join(', ')}`,
+    format: val => BIOSAMPLE_LOOKUP[val],
+    formFieldProps: { component: Select, options: BIOSAMPLE_OPTIONS },
+  },
+  [INDIVIDUAL_FIELD_TISSUE_AFFECTED]: {
+    label: 'Tissue Affected Status',
+    description: 'Yes, No, or Unknown',
+    format: val => ({ [true]: 'Yes', [false]: 'No' }[val] || 'Unknown'),
+  },
 }
 
 export const INDIVIDUAL_HPO_EXPORT_DATA = [
   {
     header: 'HPO Terms (present)',
-    field: 'features',
+    field: INDIVIDUAL_FIELD_FEATURES,
     format: features => (features ? features.map(feature => `${feature.id} (${feature.label})`).join('; ') : ''),
     description: 'comma-separated list of HPO Terms for present phenotypes in this individual',
   },
@@ -422,37 +625,98 @@ export const INDIVIDUAL_CORE_EXPORT_DATA = [
   INDIVIDUAL_FIELD_NOTES,
 ].map(exportConfigForField(INDIVIDUAL_FIELD_CONFIGS))
 
-export const INDIVIDUAL_BULK_UPDATE_EXPORT_DATA = [
-  ...INDIVIDUAL_CORE_EXPORT_DATA, exportConfigForField(INDIVIDUAL_FIELD_CONFIGS)(INDIVIDUAL_FIELD_PROBAND_RELATIONSHIP),
-]
-
 export const INDIVIDUAL_EXPORT_DATA = [].concat(
   INDIVIDUAL_ID_EXPORT_DATA, INDIVIDUAL_CORE_EXPORT_DATA, [INDIVIDUAL_HAS_DATA_EXPORT_CONFIG],
   INDIVIDUAL_HPO_EXPORT_DATA,
 )
 
+const FLAG_TITLE = {
+  chimera: '% Chimera',
+  contamination: '% Contamination',
+  coverage_exome: '% 20X Coverage',
+  coverage_genome: 'Mean Coverage',
+}
+
+const ratioLabel = (flag) => {
+  const words = snakecaseToTitlecase(flag).split(' ')
+  return `Ratio ${words[1]}/${words[2]}`
+}
+
+export const INDIVIDUAL_FIELD_LOOKUP = {
+  [INDIVIDUAL_FIELD_FILTER_FLAGS]: {
+    fieldDisplay: filterFlags => Object.entries(filterFlags).map(([flag, val]) => (
+      <Label
+        key={flag}
+        basic
+        horizontal
+        color="orange"
+        content={`${FLAG_TITLE[flag] || snakecaseToTitlecase(flag)}: ${parseFloat(val).toFixed(2)}`}
+      />
+    )),
+  },
+  [INDIVIDUAL_FIELD_POP_FILTERS]: {
+    fieldDisplay: filterFlags => Object.keys(filterFlags).map(flag => (
+      <Label
+        key={flag}
+        basic
+        horizontal
+        color="orange"
+        content={flag.startsWith('r_') ? ratioLabel(flag) : snakecaseToTitlecase(flag.replace('n_', 'num._'))}
+      />
+    )),
+  },
+  [INDIVIDUAL_FIELD_SV_FLAGS]: {
+    fieldDisplay: filterFlags => filterFlags.map(flag => (
+      <Label
+        key={flag}
+        basic
+        horizontal
+        color="orange"
+        content={snakecaseToTitlecase(flag)}
+      />
+    )),
+  },
+  [INDIVIDUAL_FIELD_FEATURES]: {
+    fieldDisplay: individual => <HpoPanel individual={individual} />,
+    individualFields: individual => ({
+      initialValues: { ...individual, individualField: 'hpo_terms' },
+      fieldValue: individual,
+    }),
+  },
+}
+
 // CLINVAR
 
-export const CLINSIG_SEVERITY = {
-  // clinvar
-  pathogenic: 1,
-  'risk factor': 0,
-  risk_factor: 0,
-  'likely pathogenic': 1,
-  'pathogenic/likely_pathogenic': 1,
-  likely_pathogenic: 1,
-  benign: -1,
-  'likely benign': -1,
-  'benign/likely_benign': -1,
-  likely_benign: -1,
-  protective: -1,
-  // hgmd
-  DM: 1,
-  'DM?': 0,
-  FPV: 0,
-  FP: 0,
-  DFP: 0,
-  DP: 0,
+const CLINVAR_DEFAULT_PATHOGENICITY = 'no_pathogenic_assertion'
+const CLINVAR_MAX_RISK_PATHOGENICITY = 'established_risk_allele'
+const CLINVAR_MIN_RISK_PATHOGENICITY = 'likely_risk_allele'
+const CLINVAR_PATHOGENICITIES = [
+  'pathogenic',
+  'pathogenic/likely_pathogenic',
+  'pathogenic/likely_pathogenic/established_risk_allele',
+  'pathogenic/likely_pathogenic/likely_risk_allele',
+  'pathogenic/likely_risk_allele',
+  'likely_pathogenic',
+  'likely_pathogenic/likely_risk_allele',
+  CLINVAR_MAX_RISK_PATHOGENICITY,
+  CLINVAR_MIN_RISK_PATHOGENICITY,
+  'conflicting_interpretations_of_pathogenicity',
+  'uncertain_risk_allele',
+  'uncertain_significance/uncertain_risk_allele',
+  'uncertain_significance',
+  CLINVAR_DEFAULT_PATHOGENICITY,
+  'likely_benign',
+  'benign/likely_benign',
+  'benign',
+].reverse().reduce((acc, path, i) => ({ ...acc, [path]: i }), {})
+
+const HGMD_SEVERITY = {
+  DM: 1.5,
+  'DM?': 0.5,
+  FPV: 0.5,
+  FP: 0.5,
+  DFP: 0.5,
+  DP: 0.5,
 }
 
 // LOCUS LISTS
@@ -549,17 +813,7 @@ export const VEP_GROUP_SV = 'structural'
 export const VEP_GROUP_SV_CONSEQUENCES = 'structural_consequence'
 export const VEP_GROUP_SV_NEW = 'new_structural_variants'
 
-const VEP_SV_TYPES = [
-  {
-    description: 'A deletion called from exome data',
-    text: 'Exome Deletion',
-    value: 'gCNV_DEL',
-  },
-  {
-    description: 'A duplication called from exome data',
-    text: 'Exome Duplication',
-    value: 'gCNV_DUP',
-  },
+export const SV_TYPES = [
   {
     description: 'A deletion called from genome data',
     text: 'Deletion',
@@ -601,6 +855,21 @@ const VEP_SV_TYPES = [
     value: 'BND',
   },
 ]
+const VEP_SV_TYPES = [
+  {
+    description: 'A deletion called from exome data',
+    text: 'Exome Deletion',
+    value: 'gCNV_DEL',
+  },
+  {
+    description: 'A duplication called from exome data',
+    text: 'Exome Duplication',
+    value: 'gCNV_DUP',
+  },
+  ...SV_TYPES,
+]
+
+export const EXTENDED_INTRONIC_DESCRIPTION = "A variant which falls in the first 9 bases of the 5' end of intron or the within the last 9 bases of the 3' end of intron"
 
 const VEP_SV_CONSEQUENCES = [
   {
@@ -609,9 +878,15 @@ const VEP_SV_CONSEQUENCES = [
     value: 'LOF',
   },
   {
-    description: 'A loss of function effect via intragenic exonic duplication',
-    text: 'Loss of function via Duplication',
-    value: 'DUP_LOF',
+    description: 'An SV which is predicted to result in intragenic exonic duplication without breaking any coding sequences' +
+        ' (previously called "Loss of function via Duplication")',
+    text: 'Intragenic Exon Duplication',
+    value: 'INTRAGENIC_EXON_DUP',
+  },
+  {
+    description: 'The duplication SV has one breakpoint in the coding sequence',
+    text: 'Partial Exon Duplication',
+    value: 'PARTIAL_EXON_DUP',
   },
   {
     description: 'A copy-gain effect',
@@ -624,9 +899,11 @@ const VEP_SV_CONSEQUENCES = [
     value: 'DUP_PARTIAL',
   },
   {
-    description: 'A multiallelic SV predicted to have a Loss of function, Loss of function via Duplication, Copy Gain, or Duplication Partial effect',
+    description: 'A multiallelic SV would be predicted to have a Loss of function, Intragenic Exon Duplication, Copy Gain,' +
+        ' Duplication Partial, Duplication at the Transcription Start Site (TSS_DUP), or Duplication with a breakpoint' +
+        ' in the coding sequence annotation if the SV were biallelic',
     text: 'Multiallelic SV',
-    value: 'MSV_EXON_OVR',
+    value: 'MSV_EXON_OVERLAP',
   },
   {
     description: 'An SV contained entirely within an intron',
@@ -644,14 +921,19 @@ const VEP_SV_CONSEQUENCES = [
     value: 'UTR',
   },
   {
-    description: 'An SV that does not overlap coding sequence',
-    text: 'Intergenic',
-    value: 'INTERGENIC',
-  },
-  {
     description: 'An SV which disrupts a promoter sequence (within 1kb)',
     text: 'Promoter',
     value: 'PROMOTER',
+  },
+  {
+    description: 'An SV which the SV breakend is predicted to fall in an exon',
+    text: 'Breakend Exonic',
+    value: 'BREAKEND_EXONIC',
+  },
+  {
+    description: 'An SV is predicted to duplicate the transcription start site',
+    text: 'Transcription Start Site Duplication',
+    value: 'TSS_DUP',
   },
 ]
 
@@ -708,13 +990,6 @@ const ORDERED_VEP_CONSEQUENCES = [
     so: 'SO:0001578',
   },
   {
-    description: 'A codon variant that changes at least one base of the first codon of a transcript',
-    text: 'Initiator codon',
-    value: 'initiator_codon_variant',
-    group: VEP_GROUP_MISSENSE,
-    so: 'SO:0001582',
-  },
-  {
     description: 'A codon variant that changes at least one base of the canonical start codon.',
     text: 'Start lost',
     value: 'start_lost',
@@ -736,12 +1011,6 @@ const ORDERED_VEP_CONSEQUENCES = [
     so: 'SO:0001822',
   },
   {
-    description: 'A feature amplification of a region containing a transcript',
-    text: 'Transcript amplification',
-    value: 'transcript_amplification',
-    so: 'SO:0001889',
-  },
-  {
     description: 'A sequence_variant which is predicted to change the protein encoded in the coding sequence',
     text: 'Protein Altering',
     value: 'protein_altering_variant',
@@ -756,11 +1025,38 @@ const ORDERED_VEP_CONSEQUENCES = [
     so: 'SO:0001583',
   },
   {
+    description: 'A sequence variant that causes a change at the 5th base pair after the start of the intron in the orientation of the transcript',
+    text: 'Splice donor 5th base',
+    value: 'splice_donor_5th_base_variant',
+    group: VEP_GROUP_EXTENDED_SPLICE_SITE,
+    so: 'SO:0001787',
+  },
+  {
     description: 'A sequence variant in which a change has occurred within the region of the splice site, either within 1-3 bases of the exon or 3-8 bases of the intron',
     text: 'Splice region',
     value: 'splice_region_variant',
     group: VEP_GROUP_EXTENDED_SPLICE_SITE,
     so: 'SO:0001630',
+  },
+  {
+    description: "A sequence variant that falls in the region between the 3rd and 6th base after splice junction (5' end of intron)",
+    text: 'Splice donor region',
+    value: 'splice_donor_region_variant',
+    group: VEP_GROUP_EXTENDED_SPLICE_SITE,
+    so: 'SO:0002170',
+  },
+  {
+    description: "A sequence variant that falls in the polypyrimidine tract at 3' end of intron between 17 and 3 bases from the end (acceptor -3 to acceptor -17)",
+    text: 'Splice polypyrimidine tract',
+    value: 'splice_polypyrimidine_tract_variant',
+    group: VEP_GROUP_EXTENDED_SPLICE_SITE,
+    so: 'SO:0002169',
+  },
+  {
+    description: EXTENDED_INTRONIC_DESCRIPTION,
+    text: 'Extended Intronic Splice Region',
+    value: 'extended_intronic_splice_region_variant',
+    group: VEP_GROUP_EXTENDED_SPLICE_SITE,
   },
   {
     description: 'A sequence variant where at least one base of the final codon of an incompletely annotated transcript is changed',
@@ -774,6 +1070,13 @@ const ORDERED_VEP_CONSEQUENCES = [
     value: 'synonymous_variant',
     group: VEP_GROUP_SYNONYMOUS,
     so: 'SO:0001819',
+  },
+  {
+    description: 'A sequence variant where at least one base in the start codon is changed, but the start remains',
+    text: 'Start retained',
+    value: 'start_retained_variant',
+    group: VEP_GROUP_SYNONYMOUS,
+    so: 'SO:0002019',
   },
   {
     description: 'A sequence variant where at least one base in the terminator codon is changed, but the terminator remains',
@@ -818,25 +1121,16 @@ const ORDERED_VEP_CONSEQUENCES = [
     value: 'NMD_transcript_variant',
     so: 'SO:0001621',
   },
-  // 2 kinds of 'non_coding_transcript_exon_variant' text due to value change in Ensembl v77
   {
-    description: 'A sequence variant that changes non-coding exon sequence',
-    text: 'Non-coding exon variant',
-    value: 'non_coding_exon_variant',
-    so: 'SO:0001792',
+    description: 'A sequence variant that changes non-coding exon sequence in a canonical transcript for that gene, typically a noncoding gene',
+    text: 'Non-coding transcript exon variant (canonical)',
+    value: 'non_coding_transcript_exon_variant__canonical',
   },
   {
-    description: 'A sequence variant that changes non-coding exon sequence',
-    text: 'Non-coding transcript exon variant',
+    description: 'A sequence variant that changes non-coding exon sequence in any transcript for that gene, often a noncoding version of a protein coding gene',
+    text: 'Non-coding transcript exon variant (all)',
     value: 'non_coding_transcript_exon_variant',
     so: 'SO:0001792',
-  },
-  // 2 kinds of 'nc_transcript_variant' text due to value change in Ensembl v77
-  {
-    description: 'A transcript variant of a non coding RNA',
-    text: 'nc transcript variant',
-    value: 'nc_transcript_variant',
-    so: 'SO:0001619',
   },
   {
     description: 'A transcript variant of a non coding RNA',
@@ -845,58 +1139,22 @@ const ORDERED_VEP_CONSEQUENCES = [
     so: 'SO:0001619',
   },
   {
-    description: 'A feature ablation whereby the deleted region includes a transcription factor binding site',
-    text: 'TFBS ablation',
-    value: 'TFBS_ablation',
-    so: 'SO:0001895',
-  },
-  {
-    description: 'A feature amplification of a region containing a transcription factor binding site',
-    text: 'TFBS amplification',
-    value: 'TFBS_amplification',
-    so: 'SO:0001892',
-  },
-  {
-    description: 'In regulatory region annotated by Ensembl',
-    text: 'TF binding site variant',
-    value: 'TF_binding_site_variant',
-    so: 'SO:0001782',
-  },
-  {
-    description: 'A sequence variant located within a regulatory region',
-    text: 'Regulatory region variant',
-    value: 'regulatory_region_variant',
-    so: 'SO:0001566',
-  },
-  {
-    description: 'A feature ablation whereby the deleted region includes a regulatory region',
-    text: 'Regulatory region ablation',
-    value: 'regulatory_region_ablation',
-    so: 'SO:0001894',
-  },
-  {
-    description: 'A feature amplification of a region containing a regulatory region',
-    text: 'Regulatory region amplification',
-    value: 'regulatory_region_amplification',
-    so: 'SO:0001891',
-  },
-  {
-    description: 'A sequence variant that causes the extension of a genomic feature, with regard to the reference sequence',
-    text: 'Feature elongation',
-    value: 'feature_elongation',
-    so: 'SO:0001907',
-  },
-  {
-    description: 'A sequence variant that causes the reduction of a genomic feature, with regard to the reference sequence',
-    text: 'Feature truncation',
-    value: 'feature_truncation',
-    so: 'SO:0001906',
+    description: 'A transcript variant of a protein coding gene',
+    text: 'Coding transcript variant',
+    value: 'coding_transcript_variant',
+    so: 'SO:0001968',
   },
   {
     description: 'A sequence variant located in the intergenic region, between genes',
     text: 'Intergenic variant',
     value: 'intergenic_variant',
     so: 'SO:0001628',
+  },
+  {
+    description: 'A sequence_variant is a non exact copy of a sequence_feature or genome exhibiting one or more sequence_alteration',
+    text: 'Sequence variant',
+    value: 'sequence_variant',
+    so: 'SO:0001060',
   },
 ]
 
@@ -937,22 +1195,30 @@ export const SVTYPE_DETAILS = {
   },
 }
 
+export const SCREEN_LABELS = {
+  PLS: 'Promotor-like signatures',
+  pELS: 'proximal Enhancer-like signatures',
+  dELS: 'distal Enhancer-like signatures',
+}
+
 export const SHOW_ALL = 'ALL'
 export const NOTE_TAG_NAME = 'Has Notes'
 export const EXCLUDED_TAG_NAME = 'Excluded'
 export const REVIEW_TAG_NAME = 'Review'
 export const KNOWN_GENE_FOR_PHENOTYPE_TAG_NAME = 'Known gene for phenotype'
 export const DISCOVERY_CATEGORY_NAME = 'CMG Discovery Tags'
+export const MME_TAG_NAME = 'MME Submission'
+export const GREGOR_FINDING_TAG_NAME = 'GREGoR Finding'
 
 export const SORT_BY_FAMILY_GUID = 'FAMILY_GUID'
 export const SORT_BY_XPOS = 'XPOS'
 const SORT_BY_PATHOGENICITY = 'PATHOGENICITY'
 const SORT_BY_IN_OMIM = 'IN_OMIM'
+const SORT_BY_PRIORITIZED_GENE = 'PRIORITIZED_GENE'
 const SORT_BY_PROTEIN_CONSQ = 'PROTEIN_CONSEQUENCE'
 const SORT_BY_GNOMAD_GENOMES = 'GNOMAD'
 const SORT_BY_GNOMAD_EXOMES = 'GNOMAD_EXOMES'
 const SORT_BY_CALLSET_AF = 'CALLSET_AF'
-const SORT_BY_1KG = '1KG'
 const SORT_BY_CONSTRAINT = 'CONSTRAINT'
 const SORT_BY_CADD = 'CADD'
 const SORT_BY_REVEL = 'REVEL'
@@ -960,6 +1226,7 @@ const SORT_BY_SPLICE_AI = 'SPLICE_AI'
 const SORT_BY_EIGEN = 'EIGEN'
 const SORT_BY_MPC = 'MPC'
 const SORT_BY_PRIMATE_AI = 'PRIMATE_AI'
+const SORT_BY_ALPHAMISSENSE = 'ALPHAMISSENSE'
 const SORT_BY_TAGGED_DATE = 'TAGGED_DATE'
 const SORT_BY_SIZE = 'SIZE'
 
@@ -968,21 +1235,54 @@ export const getPermissionedHgmdClass = (variant, user, familiesByGuid, projectB
     familyGuid => projectByGuid[familiesByGuid[familyGuid].projectGuid].enableHgmd,
   )) && variant.hgmd && variant.hgmd.class
 
-const clinsigSeverity = (variant, user, familiesByGuid, projectByGuid) => {
-  const { clinvar = {} } = variant
-  const clinvarSignificance = clinvar.clinicalSignificance && clinvar.clinicalSignificance.split('/')[0].toLowerCase()
-  const hgmdSignificance = getPermissionedHgmdClass(variant, user, familiesByGuid, projectByGuid)
-  if (!clinvarSignificance && !hgmdSignificance) return -10
-  let clinvarSeverity = 0.1
-  if (clinvarSignificance) {
-    clinvarSeverity = clinvarSignificance in CLINSIG_SEVERITY ? CLINSIG_SEVERITY[clinvarSignificance] + 1 : 0.5
+export const clinvarSignificance = (clinvar) => {
+  let { pathogenicity, assertions } = clinvar || {}
+  const { clinicalSignificance } = clinvar || {}
+  if (clinicalSignificance && !pathogenicity) {
+    [pathogenicity, ...assertions] = clinicalSignificance.split(/[,|]/)
+    if (pathogenicity === 'Pathogenic/Likely_pathogenic/Pathogenic') {
+      pathogenicity = 'Pathogenic/Likely_pathogenic'
+    } else if (pathogenicity === 'Pathogenic/Pathogenic') {
+      pathogenicity = 'Pathogenic'
+    }
+    if (!(pathogenicity.replace(' ', '_').toLowerCase() in CLINVAR_PATHOGENICITIES)) {
+      assertions = [pathogenicity, ...assertions]
+      pathogenicity = CLINVAR_DEFAULT_PATHOGENICITY
+    }
+    assertions = assertions.map(a => a.replace(/^_/, ''))
   }
-  const hgmdSeverity = hgmdSignificance in CLINSIG_SEVERITY ? CLINSIG_SEVERITY[hgmdSignificance] + 0.5 : 0
+
+  return { pathogenicity, assertions, severity: CLINVAR_PATHOGENICITIES[pathogenicity?.replace(' ', '_').toLowerCase()] }
+}
+
+export const clinvarColor = (severity, pathColor, riskColor, benignColor) => {
+  if (severity > CLINVAR_PATHOGENICITIES[CLINVAR_MAX_RISK_PATHOGENICITY]) {
+    return pathColor
+  }
+  if (severity >= CLINVAR_PATHOGENICITIES[CLINVAR_MIN_RISK_PATHOGENICITY]) {
+    return riskColor
+  }
+  if (severity < CLINVAR_PATHOGENICITIES[CLINVAR_DEFAULT_PATHOGENICITY]) {
+    return benignColor
+  }
+  return null
+}
+
+const clinsigSeverity = (variant, user, familiesByGuid, projectByGuid) => {
+  const { pathogenicity, severity } = clinvarSignificance(variant.clinvar)
+  const hgmdSignificance = getPermissionedHgmdClass(variant, user, familiesByGuid, projectByGuid)
+  if (!pathogenicity && !hgmdSignificance) return -10
+  const clinvarSeverity = pathogenicity ? severity + 1 : 0.1
+  const hgmdSeverity = HGMD_SEVERITY[hgmdSignificance] || 0
   return clinvarSeverity + hgmdSeverity
 }
 
 export const MISSENSE_THRESHHOLD = 3
 export const LOF_THRESHHOLD = 0.35
+
+const PRIORITIZED_GENE_MAX_RANK = 1000
+
+export const getDecipherGeneLink = ({ geneId }) => `https://www.deciphergenomics.org/gene/${geneId}/overview/protein-genomic-info`
 
 const getGeneConstraintSortScore = ({ constraints }) => {
   if (!constraints || constraints.louef === undefined) {
@@ -1001,15 +1301,44 @@ const populationComparator =
 const predictionComparator =
   prediction => (a, b) => ((b.predictions || {})[prediction] || -1) - ((a.predictions || {})[prediction] || -1)
 
-const getConsequenceRank = ({ transcripts, svType }) => (
-  transcripts ? Math.min(...Object.values(transcripts || {}).flat().map(
-    ({ majorConsequence }) => VEP_CONSEQUENCE_ORDER_LOOKUP[majorConsequence],
-  ).filter(val => val)) : VEP_CONSEQUENCE_ORDER_LOOKUP[svType]
+const getTranscriptValues = (transcripts, getValue) => (
+  Object.values(transcripts || {}).flat().map(getValue).filter(val => val)
 )
+
+const getConsequenceRank = ({ transcripts, svType }) => (
+  transcripts ? Math.min(...getTranscriptValues(
+    transcripts,
+    ({ majorConsequence }) => VEP_CONSEQUENCE_ORDER_LOOKUP[majorConsequence],
+  )) : VEP_CONSEQUENCE_ORDER_LOOKUP[svType]
+)
+
+const getAlphamissenseRank = ({ transcripts }) => Math.max(
+  ...getTranscriptValues(transcripts, t => t.alphamissense?.pathogenicity),
+)
+
+const getPrioritizedGeneTopRank = (variant, genesById, individualGeneDataByFamilyGene) => Math.min(...Object.keys(
+  variant.transcripts || {},
+).reduce((acc, geneId) => (
+  genesById[geneId] && individualGeneDataByFamilyGene[variant.familyGuids[0]]?.phenotypeGeneScores ? [
+    ...acc,
+    ...Object.values(individualGeneDataByFamilyGene[variant.familyGuids[0]].phenotypeGeneScores[geneId] || {}).reduce(
+      (acc2, toolScores) => ([...acc2, ...toolScores.map(score => score.rank)]), [],
+    ),
+  ] : acc), [PRIORITIZED_GENE_MAX_RANK]))
 
 const VARIANT_SORT_OPTONS = [
   { value: SORT_BY_FAMILY_GUID, text: 'Family', comparator: (a, b) => a.familyGuids[0].localeCompare(b.familyGuids[0]) },
   { value: SORT_BY_XPOS, text: 'Position', comparator: (a, b) => a.xpos - b.xpos },
+  {
+    value: SORT_BY_IN_OMIM,
+    text: 'In OMIM',
+    comparator: (a, b, genesById) => (
+      Object.keys(b.transcripts || {}).reduce(
+        (acc, geneId) => (genesById[geneId] ? acc + genesById[geneId].omimPhenotypes.length : acc), 0,
+      ) - Object.keys(a.transcripts || {}).reduce(
+        (acc, geneId) => (genesById[geneId] ? acc + genesById[geneId].omimPhenotypes.length : acc), 0,
+      )),
+  },
   {
     value: SORT_BY_PROTEIN_CONSQ,
     text: 'Protein Consequence',
@@ -1018,13 +1347,17 @@ const VARIANT_SORT_OPTONS = [
   { value: SORT_BY_GNOMAD_GENOMES, text: 'gnomAD Genomes Frequency', comparator: populationComparator('gnomad_genomes') },
   { value: SORT_BY_GNOMAD_EXOMES, text: 'gnomAD Exomes Frequency', comparator: populationComparator('gnomad_exomes') },
   { value: SORT_BY_CALLSET_AF, text: 'Callset AF', comparator: populationComparator('callset') },
-  { value: SORT_BY_1KG, text: '1kg  Frequency', comparator: populationComparator('g1k') },
-  { value: SORT_BY_CADD, text: 'Cadd', comparator: predictionComparator('cadd') },
-  { value: SORT_BY_REVEL, text: 'Revel', comparator: predictionComparator('revel') },
+  { value: SORT_BY_CADD, text: 'CADD', comparator: predictionComparator('cadd') },
+  { value: SORT_BY_REVEL, text: 'REVEL', comparator: predictionComparator('revel') },
   { value: SORT_BY_EIGEN, text: 'Eigen', comparator: predictionComparator('eigen') },
   { value: SORT_BY_MPC, text: 'MPC', comparator: predictionComparator('mpc') },
   { value: SORT_BY_SPLICE_AI, text: 'SpliceAI', comparator: predictionComparator('splice_ai') },
-  { value: SORT_BY_PRIMATE_AI, text: 'Primate AI', comparator: predictionComparator('primate_ai') },
+  { value: SORT_BY_PRIMATE_AI, text: 'PrimateAI', comparator: predictionComparator('primate_ai') },
+  {
+    value: SORT_BY_ALPHAMISSENSE,
+    text: 'AlphaMissense',
+    comparator: (a, b) => getAlphamissenseRank(b) - getAlphamissenseRank(a),
+  },
   {
     value: SORT_BY_PATHOGENICITY,
     text: 'Pathogenicity',
@@ -1043,14 +1376,12 @@ const VARIANT_SORT_OPTONS = [
       ))),
   },
   {
-    value: SORT_BY_IN_OMIM,
-    text: 'In OMIM',
-    comparator: (a, b, genesById) => (
-      Object.keys(b.transcripts || {}).reduce(
-        (acc, geneId) => (genesById[geneId] ? acc + genesById[geneId].omimPhenotypes.length : acc), 0,
-      ) - Object.keys(a.transcripts || {}).reduce(
-        (acc, geneId) => (genesById[geneId] ? acc + genesById[geneId].omimPhenotypes.length : acc), 0,
-      )),
+    value: SORT_BY_PRIORITIZED_GENE,
+    text: 'Phenotype Prioritized Gene',
+    comparator: (a, b, genesById, _tag, _user, _family, _project, individualGeneDataByFamilyGene) => (
+      getPrioritizedGeneTopRank(a, genesById, individualGeneDataByFamilyGene) -
+        getPrioritizedGeneTopRank(b, genesById, individualGeneDataByFamilyGene)
+    ),
   },
   {
     value: SORT_BY_SIZE,
@@ -1067,7 +1398,7 @@ const VARIANT_SORT_OPTONS = [
     ),
   },
 ]
-const VARIANT_SEARCH_SORT_OPTONS = VARIANT_SORT_OPTONS.slice(1, VARIANT_SORT_OPTONS.length - 1)
+const VARIANT_SEARCH_SORT_OPTONS = VARIANT_SORT_OPTONS.slice(0, VARIANT_SORT_OPTONS.length - 1)
 
 export const VARIANT_SORT_LOOKUP = VARIANT_SORT_OPTONS.reduce(
   (acc, opt) => ({
@@ -1136,6 +1467,11 @@ const INDICATOR_MAP = {
   T: { color: 'green', value: 'tolerated' },
 }
 
+const FATHMM_MAP = {
+  ...INDICATOR_MAP,
+  N: { color: 'green', value: 'neutral' },
+}
+
 const POLYPHEN_MAP = {
   D: { color: 'red', value: 'probably damaging' },
   P: { color: 'yellow', value: 'possibly damaging' },
@@ -1163,35 +1499,106 @@ export const SV_IN_SILICO_GROUP = 'Structural'
 export const NO_SV_IN_SILICO_GROUPS = [MISSENSE_IN_SILICO_GROUP, CODING_IN_SILICO_GROUP]
 export const SPLICE_AI_FIELD = 'splice_ai'
 
-export const PREDICTOR_FIELDS = [
-  { field: 'cadd', group: CODING_IN_SILICO_GROUP, warningThreshold: 10, dangerThreshold: 20, min: 1, max: 99 },
-  { field: 'revel', group: MISSENSE_IN_SILICO_GROUP, warningThreshold: 0.5, dangerThreshold: 0.75 },
-  { field: 'primate_ai', group: MISSENSE_IN_SILICO_GROUP, warningThreshold: 0.5, dangerThreshold: 0.7 },
-  { field: 'mpc', group: MISSENSE_IN_SILICO_GROUP, warningThreshold: 1, dangerThreshold: 2, max: 5 },
+const rangeSourceLink = <a href="https://pubmed.ncbi.nlm.nih.gov/36413997" target="_blank" rel="noreferrer">36413997</a>
+const PRED_COLOR_MAP = ['green', 'olive', 'grey', 'yellow', 'red', '#8b0000']
+const REVERSE_PRED_COLOR_MAP = [...PRED_COLOR_MAP].reverse()
+
+export const ORDERED_PREDICTOR_FIELDS = [
+  { field: 'cadd', group: CODING_IN_SILICO_GROUP, thresholds: [0.151, 22.8, 25.3, 28.1, undefined], min: 1, max: 99, fieldTitle: 'CADD', requiresCitation: true },
+  { field: 'revel', group: MISSENSE_IN_SILICO_GROUP, thresholds: [0.0161, 0.291, 0.644, 0.773, 0.932], fieldTitle: 'REVEL', requiresCitation: true },
+  { field: 'alphamissense', fieldTitle: 'AlphaMissense', displayOnly: true },
+  { field: 'vest', thresholds: [undefined, 0.45, 0.764, 0.861, 0.965], fieldTitle: 'VEST', requiresCitation: true },
+  { field: 'mut_pred', thresholds: [0.0101, 0.392, 0.737, 0.829, 0.932], fieldTitle: 'MutPred', requiresCitation: true },
+  { field: 'mpc', group: MISSENSE_IN_SILICO_GROUP, thresholds: [undefined, undefined, 1.36, 1.828, undefined], max: 5, fieldTitle: 'MPC' },
   {
     field: SPLICE_AI_FIELD,
     group: SPLICING_IN_SILICO_GROUP,
-    warningThreshold: 0.5,
-    dangerThreshold: 0.8,
+    thresholds: [undefined, undefined, 0.5, 0.8, undefined],
     infoField: 'splice_ai_consequence',
     infoTitle: 'Predicted Consequence',
     fieldTitle: 'SpliceAI',
+    getHref: ({ chrom, pos, ref, alt, genomeVersion }) => (
+      `https://spliceailookup.broadinstitute.org/#variant=${chrom}-${pos}-${ref}-${alt}&hg=${genomeVersion}&distance=1000&mask=0`
+    ),
   },
-  { field: 'eigen', group: CODING_IN_SILICO_GROUP, warningThreshold: 1, dangerThreshold: 2, max: 99 },
-  { field: 'dann', displayOnly: true, warningThreshold: 0.93, dangerThreshold: 0.96 },
-  { field: 'strvctvre', group: SV_IN_SILICO_GROUP, warningThreshold: 0.5, dangerThreshold: 0.75 },
-  { field: 'polyphen', group: MISSENSE_IN_SILICO_GROUP, indicatorMap: POLYPHEN_MAP },
-  { field: 'sift', group: MISSENSE_IN_SILICO_GROUP, indicatorMap: INDICATOR_MAP },
-  { field: 'mut_taster', group: MISSENSE_IN_SILICO_GROUP, indicatorMap: MUTTASTER_MAP },
-  { field: 'fathmm', group: MISSENSE_IN_SILICO_GROUP, indicatorMap: INDICATOR_MAP },
-  { field: 'metasvm', group: MISSENSE_IN_SILICO_GROUP, indicatorMap: INDICATOR_MAP },
-  { field: 'gerp_rs', group: MISSENSE_IN_SILICO_GROUP, noSeverity: true, min: -13, max: 7 },
-  { field: 'phastcons_100_vert', group: MISSENSE_IN_SILICO_GROUP, noSeverity: true },
-  { field: 'apogee', warningThreshold: 0.5, dangerThreshold: 0.5 },
+  { field: 'primate_ai', group: MISSENSE_IN_SILICO_GROUP, thresholds: [undefined, 0.484, 0.79, 0.867, undefined], fieldTitle: 'PrimateAI', requiresCitation: true },
+  { field: 'eigen', group: CODING_IN_SILICO_GROUP, thresholds: [undefined, undefined, 1, 2, undefined], max: 99 },
+  { field: 'dann', displayOnly: true, thresholds: [undefined, undefined, 0.93, 0.96, undefined] },
+  { field: 'strvctvre', group: SV_IN_SILICO_GROUP, thresholds: [undefined, undefined, 0.5, 0.75, undefined] },
+  { field: 'polyphen', group: MISSENSE_IN_SILICO_GROUP, thresholds: [undefined, 0.114, 0.978, 0.999, undefined], indicatorMap: POLYPHEN_MAP, fieldTitle: 'PolyPhen', requiresCitation: true },
+  { field: 'sift', reverseThresholds: true, thresholds: [undefined, 0, 0.002, 0.081, undefined], group: MISSENSE_IN_SILICO_GROUP, indicatorMap: INDICATOR_MAP, fieldTitle: 'SIFT', requiresCitation: true },
+  { field: 'mut_taster', group: MISSENSE_IN_SILICO_GROUP, indicatorMap: MUTTASTER_MAP, fieldTitle: 'MutTaster' },
+  { field: 'fathmm', reverseThresholds: true, thresholds: [undefined, -5.041, -4.14, 3.32, undefined], group: MISSENSE_IN_SILICO_GROUP, indicatorMap: FATHMM_MAP, fieldTitle: 'FATHMM', requiresCitation: true },
+  { field: 'apogee', thresholds: [undefined, undefined, 0.5, 0.5, undefined] },
+  {
+    field: 'gnomad_noncoding',
+    fieldTitle: 'gnomAD Constraint',
+    displayOnly: true,
+    thresholds: [undefined, undefined, 2.18, 4, undefined],
+    requiresCitation: true,
+  },
   { field: 'haplogroup_defining', indicatorMap: { Y: { color: 'green', value: '' } } },
-  { field: 'mitotip', indicatorMap: MITOTIP_MAP },
-  { field: 'hmtvar', warningThreshold: 0.35, dangerThreshold: 0.35 },
+  { field: 'mitotip', indicatorMap: MITOTIP_MAP, fieldTitle: 'MitoTIP' },
+  { field: 'hmtvar', thresholds: [undefined, undefined, 0.35, 0.35, undefined], fieldTitle: 'HmtVar' },
+  { field: 'mlc', thresholds: [undefined, 0.5, 0.5, 0.75, undefined], fieldTitle: 'MLC' },
 ]
+
+export const coloredIcon = color => React.createElement(color.startsWith('#') ? ColoredIcon : Icon, { name: 'circle', size: 'small', color })
+export const predictionFieldValue = (
+  predictions, { field, fieldValue, thresholds, reverseThresholds, indicatorMap, infoField, infoTitle },
+) => {
+  let value = fieldValue || predictions[field]
+  if (value === null || value === undefined) {
+    return { value }
+  }
+
+  const infoValue = predictions[infoField]
+
+  const floatValue = parseFloat(value)
+  if (thresholds && !(indicatorMap && Number.isNaN(floatValue))) {
+    value = floatValue.toPrecision(3)
+    const color = (reverseThresholds ? REVERSE_PRED_COLOR_MAP : PRED_COLOR_MAP).find(
+      (clr, i) => (thresholds[i - 1] || thresholds[i]) &&
+        (thresholds[i - 1] === undefined || value >= thresholds[i - 1]) &&
+        (thresholds[i] === undefined || value < thresholds[i]),
+    )
+    return { value, color, infoValue, infoTitle, thresholds, reverseThresholds }
+  }
+
+  return indicatorMap[value[0]] || indicatorMap[value]
+}
+export const predictorColorRanges = (thresholds, requiresCitation, reverseThresholds) => (
+  <div>
+    {(reverseThresholds ? REVERSE_PRED_COLOR_MAP : PRED_COLOR_MAP).map((c, i) => {
+      const prevUndefined = thresholds[i - 1] === undefined
+      let range
+      if (thresholds[i] === undefined) {
+        if (prevUndefined) {
+          return null
+        }
+        range = ` >= ${thresholds[i - 1]}`
+      } else if (prevUndefined) {
+        range = ` < ${thresholds[i]}`
+      } else if (thresholds[i - 1] === thresholds[i]) {
+        return null
+      } else {
+        range = ` ${thresholds[i - 1]} - ${thresholds[i]}`
+      }
+      return (
+        <div key={c}>
+          {coloredIcon(c)}
+          {range}
+        </div>
+      )
+    })}
+    {requiresCitation && (
+      <small>
+        {/* eslint-disable-next-line react/jsx-one-expression-per-line */}
+        Based on 2022 ClinGen recommendations (PMID:&nbsp;{rangeSourceLink})
+      </small>
+    )}
+  </div>
+)
 
 export const getVariantMainGeneId = ({ transcripts = {}, mainTranscriptId, selectedMainTranscriptId }) => {
   if (selectedMainTranscriptId || mainTranscriptId) {
@@ -1210,9 +1617,34 @@ export const getVariantMainTranscript = ({ transcripts = {}, mainTranscriptId, s
   Object.values(transcripts),
 ).find(({ transcriptId }) => transcriptId === (selectedMainTranscriptId || mainTranscriptId)) || {}
 
+export const getVariantSummary = (variant, individualGuid) => {
+  const { alt, ref, chrom, pos, end, genomeVersion } = variant
+  const mainTranscript = getVariantMainTranscript(variant)
+  let consequence = `${(mainTranscript.majorConsequence || '').replace(/_variant/g, '').replace(/_/g, ' ')} variant`
+  let variantDetail = [(mainTranscript.hgvsc || '').split(':').pop(), (mainTranscript.hgvsp || '').split(':').pop()].filter(val => val).join('/')
+  const displayGenomeVersion = GENOME_VERSION_DISPLAY_LOOKUP[genomeVersion] || genomeVersion
+  let inheritance = ''
+  if (individualGuid) {
+    const genotype = (variant.genotypes || {})[individualGuid] || {}
+    inheritance = genotype.numAlt === 1 ? ' heterozygous' : ' homozygous'
+    if (genotype.numAlt === -1) {
+      inheritance = ' copy number'
+      consequence = genotype.cn < 2 ? 'deletion' : 'duplication'
+      variantDetail = `CN=${genotype.cn}`
+    }
+  }
+  const position = ref ? `${pos} ${ref}>${alt}` : `${pos}-${end}`
+  return `a${inheritance} ${consequence} ${chrom}:${position}${displayGenomeVersion ? ` (${displayGenomeVersion})` : ''}${variantDetail ? ` (${variantDetail})` : ''}`
+}
+
 const getPopAf = population => (variant) => {
   const populationData = (variant.populations || {})[population]
   return (populationData || {}).af
+}
+
+const getVariantGene = (variant, tagsByGuid, notesByGuid, genesById) => {
+  const { geneId } = getVariantMainTranscript(variant)
+  return genesById[geneId]?.geneSymbol || geneId
 }
 
 export const VARIANT_EXPORT_DATA = [
@@ -1220,9 +1652,9 @@ export const VARIANT_EXPORT_DATA = [
   { header: 'pos' },
   { header: 'ref' },
   { header: 'alt' },
-  { header: 'gene', getVal: variant => getVariantMainTranscript(variant).geneSymbol },
+  { header: 'gene', getVal: getVariantGene },
   { header: 'worst_consequence', getVal: variant => getVariantMainTranscript(variant).majorConsequence },
-  { header: '1kg_freq', getVal: getPopAf('g1k') },
+  { header: 'callset_freq', getVal: variant => getPopAf('callset')(variant) || getPopAf('seqr')(variant) },
   { header: 'exac_freq', getVal: getPopAf('exac') },
   { header: 'gnomad_genomes_freq', getVal: getPopAf('gnomad_genomes') },
   { header: 'gnomad_exomes_freq', getVal: getPopAf('gnomad_exomes') },
@@ -1231,16 +1663,15 @@ export const VARIANT_EXPORT_DATA = [
   { header: 'revel', getVal: variant => (variant.predictions || {}).revel },
   { header: 'eigen', getVal: variant => (variant.predictions || {}).eigen },
   { header: 'splice_ai', getVal: variant => (variant.predictions || {}).splice_ai },
-  { header: 'polyphen', getVal: variant => (POLYPHEN_MAP[(variant.predictions || {}).polyphen] || {}).value },
-  { header: 'sift', getVal: variant => (INDICATOR_MAP[(variant.predictions || {}).sift] || {}).value },
+  { header: 'polyphen', getVal: variant => (POLYPHEN_MAP[(variant.predictions || {}).polyphen] || {}).value || (variant.predictions || {}).polyphen },
+  { header: 'sift', getVal: variant => (INDICATOR_MAP[(variant.predictions || {}).sift] || {}).value || (variant.predictions || {}).sift },
   { header: 'muttaster', getVal: variant => (MUTTASTER_MAP[(variant.predictions || {}).mut_taster] || {}).value },
-  { header: 'fathmm', getVal: variant => (INDICATOR_MAP[(variant.predictions || {}).fathmm] || {}).value },
+  { header: 'fathmm', getVal: variant => (INDICATOR_MAP[(variant.predictions || {}).fathmm] || {}).value || (variant.predictions || {}).fathmm },
   { header: 'rsid', getVal: variant => variant.rsid },
   { header: 'hgvsc', getVal: variant => getVariantMainTranscript(variant).hgvsc },
   { header: 'hgvsp', getVal: variant => getVariantMainTranscript(variant).hgvsp },
-  { header: 'clinvar_clinical_significance', getVal: variant => (variant.clinvar || {}).clinicalSignificance },
+  { header: 'clinvar_clinical_significance', getVal: variant => (variant.clinvar || {}).clinicalSignificance || (variant.clinvar || {}).pathogenicity },
   { header: 'clinvar_gold_stars', getVal: variant => (variant.clinvar || {}).goldStars },
-  { header: 'filter', getVal: variant => variant.genotypeFilters },
   { header: 'project' },
   { header: 'family' },
   { header: 'tags', getVal: (variant, tagsByGuid) => variant.tagGuids.map(tagGuid => tagsByGuid[tagGuid].name).join('|') },
@@ -1536,3 +1967,67 @@ export const ACMG_RULE_SPECIFICATION_COMP_HET = [
     },
   ],
 ]
+
+export const VARIANT_METADATA_COLUMNS = [
+  { name: 'genetic_findings_id' },
+  { name: 'variant_reference_assembly' },
+  { name: 'chrom' },
+  { name: 'pos' },
+  { name: 'chrom_end' },
+  { name: 'pos_end' },
+  { name: 'ref' },
+  { name: 'alt' },
+  { name: 'gene_of_interest', secondaryExportColumn: 'gene_id' },
+  { name: 'seqr_chosen_consequence' },
+  { name: 'transcript' },
+  { name: 'hgvsc' },
+  { name: 'hgvsp' },
+  { name: 'zygosity' },
+  { name: 'copy_number' },
+  { name: 'sv_name' },
+  { name: 'validated_name' },
+  { name: 'sv_type', format: ({ sv_type }) => SVTYPE_LOOKUP[sv_type] || sv_type }, // eslint-disable-line camelcase
+  { name: 'variant_inheritance' },
+  { name: 'gene_known_for_phenotype' },
+  { name: 'phenotype_contribution' },
+  { name: 'partial_contribution_explained' },
+  { name: 'notes' },
+  { name: 'ClinGen_allele_ID' },
+]
+
+export const BASE_FAMILY_METADATA_COLUMNS = [
+  { name: 'pmid_id' },
+  { name: 'condition_id' },
+  { name: 'known_condition_name' },
+  { name: 'condition_inheritance', secondaryExportColumn: 'disorders' },
+  { name: 'phenotype_description', style: { minWidth: '200px' } },
+  { name: 'analysis_groups' },
+  {
+    name: 'analysisStatus',
+    content: 'analysis_status',
+    format: ({ analysisStatus }) => FAMILY_ANALYSIS_STATUS_LOOKUP[analysisStatus]?.name,
+  },
+  { name: 'solve_status' },
+  { name: 'data_type' },
+  { name: 'date_data_generation', secondaryExportColumn: 'filter_flags' },
+  { name: 'consanguinity' },
+]
+
+// RNAseq sample tissue type mapping
+export const TISSUE_DISPLAY = {
+  WB: 'Whole Blood',
+  F: 'Fibroblast',
+  M: 'Muscle',
+  L: 'Lymphocyte',
+  A: 'Airway Cultured Epithelium',
+  B: 'Brain',
+}
+
+export const RNASEQ_JUNCTION_PADDING = 200
+
+export const FAQ_PATH = '/faq'
+export const MATCHMAKER_PATH = '/matchmaker'
+export const PRIVACY_PATH = '/privacy_policy'
+export const TOS_PATH = '/terms_of_service'
+export const FEATURE_UPDATES_PATH = '/feature_updates'
+export const PUBLIC_PAGES = [MATCHMAKER_PATH, FAQ_PATH, PRIVACY_PATH, TOS_PATH, FEATURE_UPDATES_PATH]

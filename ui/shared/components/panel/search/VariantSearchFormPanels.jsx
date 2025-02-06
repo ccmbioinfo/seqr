@@ -1,13 +1,13 @@
 import React from 'react'
 import PropTypes from 'prop-types'
 import styled from 'styled-components'
-import { Form, Accordion, Header, Segment, Grid, Icon, Loader } from 'semantic-ui-react'
+import { Form, Accordion, Header, Segment, Grid, Icon, Loader, Table } from 'semantic-ui-react'
 
 import { VerticalSpacer } from 'shared/components/Spacers'
 import { ButtonLink } from 'shared/components/StyledComponents'
 import { Select, AlignedCheckboxGroup } from 'shared/components/form/Inputs'
 import { configuredField, configuredFields } from 'shared/components/form/FormHelpers'
-import { VEP_GROUP_OTHER, SPLICE_AI_FIELD, SV_IN_SILICO_GROUP, NO_SV_IN_SILICO_GROUPS } from 'shared/utils/constants'
+import { SPLICE_AI_FIELD, SV_IN_SILICO_GROUP, NO_SV_IN_SILICO_GROUPS } from 'shared/utils/constants'
 
 import { FrequencyFilter, HeaderFrequencyFilter } from './FrequencyFilter'
 import {
@@ -23,9 +23,9 @@ import {
   QUALITY_FILTER_OPTIONS,
   ALL_QUALITY_FILTER,
   LOCATION_FIELDS,
-  CODING_IMPACT_GROUPS,
-  HIGH_IMPACT_GROUPS_SPLICE,
-  MODERATE_IMPACT_GROUPS,
+  CODING_OTHER_IMPACT_GROUPS,
+  HIGH_MODERATE_IMPACT_GROUPS,
+  ANNOTATION_OVERRIDE_GROUPS,
   SV_GROUPS,
   LOCUS_FIELD_NAME,
 } from './constants'
@@ -88,8 +88,9 @@ const ExpandCollapseCategoryContainer = styled.span`
   top: -2em;
 `
 
-const LeftAligned = styled.div`
- text-align: left;
+const CenteredTable = styled(Table)`
+  margin-left: auto !important;
+  margin-right: auto !important;
 `
 
 const LazyLabeledSlider = props => <React.Suspense fallback={<Loader />}><LabeledSlider {...props} /></React.Suspense>
@@ -106,7 +107,7 @@ export const HGMD_PATHOGENICITY_PANEL = {
   headerProps: { title: 'Pathogenicity', inputProps: JsonSelectPropsWithAll(HGMD_PATHOGENICITY_FILTER_OPTIONS, ANY_PATHOGENICITY_FILTER) },
   fields: HGMD_PATHOGENICITY_FIELDS,
   fieldProps: { control: AlignedCheckboxGroup, format: val => val || [] },
-  helpText: 'Filter by reported pathogenicity. This overrides the annotation filter, so variants will be returned if they have either the specified transcript consequence OR pathogenicity. This also overrides the frequency filter, so variants will be returned if they have either the specified frequency OR pathogenicity and frequency up to 0.05',
+  helpText: 'Filter by reported pathogenicity.  This overrides the annotation filter, the frequency filter, and the call quality filter.  Variants will be returned if they have the specified transcript consequence AND the specified frequencies AND all individuals pass all specified quality filters OR if the variant has the specified pathogenicity and a frequency up to 0.05.',
 }
 
 const IN_SILICO_SPLICING_FIELD = IN_SILICO_FIELDS.find(({ name }) => name === SPLICE_AI_FIELD)
@@ -117,7 +118,7 @@ const IN_SILICO_GROUP_INDEX_MAP = IN_SILICO_FIELDS.reduce(
 const ANNOTATION_GROUPS_SPLICE = [...ANNOTATION_GROUPS, IN_SILICO_SPLICING_FIELD]
 const ANNOTATION_GROUP_INDEX_MAP = ANNOTATION_GROUPS_SPLICE.reduce((acc, { name }, i) => ({ ...acc, [name]: i }), {})
 
-export const inSilicoFieldLayout = groups => fieldComponents => (
+export const inSilicoFieldLayout = groups => ([requireComponent, ...fieldComponents]) => (
   <Form.Field>
     <Grid divided="vertically">
       {groups.map(group => (
@@ -127,34 +128,37 @@ export const inSilicoFieldLayout = groups => fieldComponents => (
             <Grid>
               <Grid.Row>
                 {IN_SILICO_GROUP_INDEX_MAP[group].map(
-                  i => <Grid.Column key={i} width={3}>{fieldComponents[i]}</Grid.Column>,
+                  i => <Grid.Column key={i} width={3}>{fieldComponents[i - 1]}</Grid.Column>,
                 )}
               </Grid.Row>
             </Grid>
           </Grid.Column>
         </Grid.Row>
       ))}
+      <Grid.Row>
+        <Grid.Column>{requireComponent}</Grid.Column>
+      </Grid.Row>
     </Grid>
   </Form.Field>
 )
 
-export const annotationFieldLayout = (annotationGroups, hideOther) => fieldComponents => [
-  ...annotationGroups.map(groups => (
-    <Form.Field key={groups[0]} width={3}>
-      {groups.map(group => (
-        <LeftAligned key={group}>
-          {fieldComponents[ANNOTATION_GROUP_INDEX_MAP[group]]}
-          <VerticalSpacer height={20} />
-        </LeftAligned>
+const annotationColSpan = ({ maxOptionsPerColumn, options = [] }) => Math.ceil(options.length / maxOptionsPerColumn)
+
+const annotationGroupDisplay = component => (
+  <Table.Cell colSpan={annotationColSpan(component.props)} content={component} />
+)
+
+export const annotationFieldLayout = annotationGroups => fieldComponents => (
+  <Form.Field>
+    <CenteredTable basic="very" collapsing>
+      {annotationGroups.map(groups => (
+        <Table.Row key={groups[0]} verticalAlign="top">
+          {groups.map(group => annotationGroupDisplay(fieldComponents[ANNOTATION_GROUP_INDEX_MAP[group]]))}
+        </Table.Row>
       ))}
-    </Form.Field>
-  )),
-  !hideOther ? (
-    <Form.Field key={VEP_GROUP_OTHER} width={4}>
-      {fieldComponents[ANNOTATION_GROUP_INDEX_MAP[VEP_GROUP_OTHER]]}
-    </Form.Field>
-  ) : null,
-].filter(fields => fields)
+    </CenteredTable>
+  </Form.Field>
+)
 
 const MAX_FREQ_COMPONENTS_PER_ROW = 4
 
@@ -179,24 +183,30 @@ export const ANNOTATION_PANEL = {
   name: 'annotations',
   headerProps: { title: 'Annotations', inputProps: JsonSelectPropsWithAll(ANNOTATION_FILTER_OPTIONS, ALL_ANNOTATION_FILTER_DETAILS) },
   fields: ANNOTATION_GROUPS_SPLICE,
-  fieldProps: { control: AlignedCheckboxGroup, format: val => val || [] },
+  fieldProps: { control: AlignedCheckboxGroup, maxOptionsPerColumn: 7, format: val => val || [] },
   fieldLayout: annotationFieldLayout([
-    SV_GROUPS, HIGH_IMPACT_GROUPS_SPLICE, MODERATE_IMPACT_GROUPS, CODING_IMPACT_GROUPS,
+    HIGH_MODERATE_IMPACT_GROUPS, CODING_OTHER_IMPACT_GROUPS, ANNOTATION_OVERRIDE_GROUPS, SV_GROUPS,
   ]),
+  noPadding: true,
+  helpText: 'Filter by reported annotation. Variants will be returned if they have ANY of the specified annotations, including if they have a Splice AI score above the threshold and no other annotations. This filter is overridden by the pathogenicity filter, so variants will be returned if they have the specified pathogenicity even if none of the annotation filters match.',
 }
 
 export const FREQUENCY_PANEL = {
   name: 'freqs',
   headerProps: {
     title: 'Frequency',
-    inputSize: 10,
+    inputSize: 12,
     inputProps: {
       component: HeaderFrequencyFilter,
       format: val => val || {},
     },
   },
   fields: FREQUENCIES,
-  fieldProps: { control: FrequencyFilter, format: val => val || {} },
+  fieldProps: {
+    control: FrequencyFilter,
+    format: val => val || {},
+    formatNoEsLabel: label => label.replace('Callset', '').replace('This', 'seqr'),
+  },
   fieldLayout: freqFieldLayout,
   helpText: 'Filter by allele frequency (popmax AF where available) or by allele count (AC). In applicable populations, also filter by homozygous/hemizygous count (H/H).',
 }
@@ -206,7 +216,7 @@ export const LOCATION_PANEL = {
   headerProps: { title: 'Location' },
   fields: LOCATION_FIELDS,
   fieldLayout: fieldComponents => <Form.Field>{fieldComponents}</Form.Field>,
-  helpText: 'Filter by variant location. Entries can be either gene symbols (e.g. CFTR) or intervals in the form <chrom>:<start>-<end> (e.g. 4:6935002-87141054) or separated by tab. Variant entries can be either rsIDs (e.g. rs61753695) or variants in the form <chrom>-<pos>-<ref>-<alt> (e.g. 4-88047328-C-T). Entries can be separated by commas or whitespace.',
+  helpText: 'Filter by variant location. Entries can be either gene symbols (e.g. CFTR) or intervals in the form <chrom>:<start>-<end> (e.g. 4:6935002-87141054) or separated by tab. Variant entries can be either rsIDs (e.g. rs61753695) or variants in the form <chrom>-<pos>-<ref>-<alt> (e.g. 10-129958997-T-C). Entries can be separated by commas or whitespace.',
 }
 
 export const IN_SILICO_PANEL = {
@@ -226,13 +236,13 @@ export const QUALITY_PANEL = {
 
 const stopPropagation = e => e.stopPropagation()
 
-const HeaderContent = React.memo(({ name, title, inputSize, inputProps }) => (
+const HeaderContent = React.memo(({ name, title, inputSize, inputProps, esEnabled }) => (
   <Grid>
     <Grid.Row>
       <Grid.Column width={inputSize ? 16 - inputSize : 8} verticalAlign="middle">{title}</Grid.Column>
       {inputProps && (
         <ToggleHeaderFieldColumn width={inputSize || 3} floated="right" textAlign="right" onClick={stopPropagation}>
-          {configuredField({ ...inputProps, name: `search.${name}` })}
+          {configuredField({ ...inputProps, name: `search.${name}`, esEnabled })}
         </ToggleHeaderFieldColumn>
       )}
     </Grid.Row>
@@ -244,13 +254,21 @@ HeaderContent.propTypes = {
   name: PropTypes.string,
   inputSize: PropTypes.number,
   inputProps: PropTypes.object,
+  esEnabled: PropTypes.bool,
 }
 
 const searchFieldName = (name, field) => (field.fullFieldValue ? `search.${name}` : `search.${name}.${field.name}`)
 
-const PanelContent = React.memo(({ name, fields, fieldProps, helpText, fieldLayout }) => {
+const formatField = (field, name, esEnabled, { formatNoEsLabel, ...fieldProps }) => ({
+  ...fieldProps,
+  ...field,
+  name: searchFieldName(name, field),
+  label: (!esEnabled && formatNoEsLabel) ? formatNoEsLabel(field.label) : field.label,
+})
+
+const PanelContent = React.memo(({ name, fields, fieldProps, helpText, fieldLayout, esEnabled, noPadding }) => {
   const fieldComponents = fields && configuredFields(
-    { fields: fields.map(field => ({ ...(fieldProps || {}), ...field, name: searchFieldName(name, field) })) },
+    { fields: fields.map(field => formatField(field, name, esEnabled, fieldProps || {})) },
   )
   return (
     <div>
@@ -261,9 +279,9 @@ const PanelContent = React.memo(({ name, fields, fieldProps, helpText, fieldLayo
         </i>
       )}
       <Form.Group widths="equal">
-        <Form.Field width={2} />
+        {!noPadding && <Form.Field width={2} />}
         {fieldLayout ? fieldLayout(fieldComponents) : fieldComponents}
-        <Form.Field width={2} />
+        {!noPadding && <Form.Field width={2} />}
       </Form.Group>
     </div>
   )
@@ -275,12 +293,15 @@ PanelContent.propTypes = {
   fieldProps: PropTypes.object,
   helpText: PropTypes.node,
   fieldLayout: PropTypes.func,
+  esEnabled: PropTypes.bool,
+  noPadding: PropTypes.bool,
 }
 
 class VariantSearchFormPanels extends React.PureComponent {
 
   static propTypes = {
     panels: PropTypes.arrayOf(PropTypes.object),
+    esEnabled: PropTypes.bool,
   }
 
   state = { active: {} }
@@ -302,7 +323,7 @@ class VariantSearchFormPanels extends React.PureComponent {
   }
 
   render() {
-    const { panels } = this.props
+    const { panels, esEnabled } = this.props
     const { active } = this.state
     return (
       <div>
@@ -337,7 +358,7 @@ class VariantSearchFormPanels extends React.PureComponent {
                 attached={attachedTitle}
               >
                 <Icon name="dropdown" />
-                <HeaderContent name={name} {...headerProps} />
+                <HeaderContent name={name} esEnabled={esEnabled} {...headerProps} />
               </Accordion.Title>,
               <Accordion.Content
                 key={`${name}-content`}
@@ -347,7 +368,7 @@ class VariantSearchFormPanels extends React.PureComponent {
                 padded
                 textAlign="center"
               >
-                <PanelContent name={name} {...panelContentProps} />
+                <PanelContent name={name} esEnabled={esEnabled} {...panelContentProps} />
               </Accordion.Content>,
             ]
           }, [])}

@@ -10,11 +10,12 @@ import { getNewUser } from '../selectors'
 import UserFormLayout from './UserFormLayout'
 
 const passwordLengthValidate = (value) => {
-  if (value) {
-    if (value.length <= 7) return 'Password must be at least 8 characters'
-    if (value.length > 128) return 'Password must be no longer than 128 characters'
+  if (value && value.length < 8) {
+    return 'Password must be at least 8 characters'
   }
-
+  if (value && value.length > 128) {
+    return 'Password must be no longer than 128 characters'
+  }
   return undefined
 }
 

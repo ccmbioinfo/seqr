@@ -8,7 +8,10 @@ from settings import MME_DEFAULT_CONTACT_NAME, MME_DEFAULT_CONTACT_HREF
 
 class MatchmakerSubmission(ModelWithGUID):
 
-    SEX_LOOKUP = {Individual.SEX_MALE: 'MALE', Individual.SEX_FEMALE: 'FEMALE'}
+    SEX_LOOKUP = {
+        **{sex: 'MALE' for sex in Individual.MALE_SEXES},
+        **{sex: 'FEMALE' for sex in Individual.FEMALE_SEXES},
+    }
 
     individual = models.OneToOneField(Individual, on_delete=models.PROTECT)
 
@@ -17,7 +20,6 @@ class MatchmakerSubmission(ModelWithGUID):
     contact_name = models.TextField(default=MME_DEFAULT_CONTACT_NAME)
     contact_href = models.TextField(default=MME_DEFAULT_CONTACT_HREF)
     features = JSONField(null=True)
-    genomic_features = JSONField(null=True)
 
     deleted_date = models.DateTimeField(null=True)
     deleted_by = models.ForeignKey(User, null=True, on_delete=models.SET_NULL)
@@ -25,13 +27,18 @@ class MatchmakerSubmission(ModelWithGUID):
     def __unicode__(self):
         return '{}_submission_{}'.format(str(self.individual), self.id)
 
-    def _compute_guid(self):
-        return 'MS%07d_%s' % (self.id, str(self.individual))
+    GUID_PREFIX = 'MS'
 
     class Meta:
         json_fields = [
             'guid', 'created_date', 'last_modified_date', 'deleted_date'
         ]
+
+
+class MatchmakerSubmissionGenes(models.Model):
+    matchmaker_submission = models.ForeignKey(MatchmakerSubmission, on_delete=models.CASCADE)
+    saved_variant = models.ForeignKey('seqr.SavedVariant', on_delete=models.PROTECT)
+    gene_id = models.CharField(max_length=20)  # ensembl ID
 
 
 class MatchmakerIncomingQuery(ModelWithGUID):
@@ -41,8 +48,7 @@ class MatchmakerIncomingQuery(ModelWithGUID):
     def __unicode__(self):
         return '{}_{}_query'.format(self.patient_id or self.id, self.institution)
 
-    def _compute_guid(self):
-        return 'MIQ%07d_%s_%s' % (self.id, self.patient_id, self.institution.replace(' ', '_'))
+    GUID_PREFIX = 'MIQ'
 
     class Meta:
         json_fields = ['guid', 'created_date']
@@ -66,8 +72,7 @@ class MatchmakerResult(ModelWithGUID):
     def __unicode__(self):
         return '{}_{}_result'.format(self.id, str(self.submission))
 
-    def _compute_guid(self):
-        return 'MR%07d_%s' % (self.id, str(self.submission))
+    GUID_PREFIX = 'MR'
 
     class Meta:
         json_fields = [
@@ -83,8 +88,7 @@ class MatchmakerContactNotes(ModelWithGUID):
     def __unicode__(self):
         return '{}_{}_contact'.format(self.id, self.institution)
 
-    def _compute_guid(self):
-        return 'MCN%07d_%s' % (self.id, self.institution.replace(' ', '_'))
+    GUID_PREFIX = 'MCN'
 
     class Meta:
         json_fields = []

@@ -4,11 +4,12 @@ import { connect } from 'react-redux'
 import { Popup, Icon } from 'semantic-ui-react'
 import styled from 'styled-components'
 
-import { loadUserOptions, loadProjectAnalysisGroups, updateFamily } from 'redux/rootReducer'
+import { loadUserOptions, updateFamily } from 'redux/rootReducer'
+import { loadProjectAnalysisGroups } from 'redux/utils/reducerUtils'
 import {
   getSamplesByFamily,
   getUserOptionsIsLoading,
-  getHasActiveSearchableSampleByFamily,
+  getHasActiveSearchSampleByFamily,
   getUserOptions,
   getProjectAnalysisGroupOptions,
   getAnalysisGroupsByFamily,
@@ -29,9 +30,9 @@ const NoWrap = styled.div`
 
 const BaseFirstSample = React.memo(({ firstFamilySample, compact, hasActiveVariantSample }) => (
   <Sample
-    loadedSample={firstFamilySample}
     hoverDetails={compact ? 'first loaded' : null}
     isOutdated={!hasActiveVariantSample}
+    {...(firstFamilySample || {})}
   />
 ))
 
@@ -43,7 +44,7 @@ BaseFirstSample.propTypes = {
 
 const mapSampleDispatchToProps = (state, ownProps) => ({
   firstFamilySample: (getSamplesByFamily(state)[ownProps.familyGuid] || [])[0],
-  hasActiveVariantSample: (getHasActiveSearchableSampleByFamily(state)[ownProps.familyGuid] || {}).isActive,
+  hasActiveVariantSample: getHasActiveSearchSampleByFamily(state)[ownProps.familyGuid],
 })
 
 export const FirstSample = connect(mapSampleDispatchToProps)(BaseFirstSample)

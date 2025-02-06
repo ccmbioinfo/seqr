@@ -17,7 +17,7 @@ After installation, run `psql -l` and if there is no user named `postgres`, run 
 
 - [redis](https://redis.io/topics/quickstart)
 
-- [node/npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
+- [node/npm <14](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm).  Note: more recent versions of `node` may not function are not officially supported.
 
 Optionally, if planning to use elasticsearch from docker-compose, install:
 - [docker](https://docs.docker.com/install/)
@@ -51,6 +51,9 @@ database so the data looks comparable. You will want to periodically re-run this
 ./deploy/kubectl_helpers/restore_local_db.sh prod seqrdb
 ./deploy/kubectl_helpers/restore_local_db.sh prod reference_data_db
 ```
+Note: If either database restore script fails due to the `gcloud sql export` command taking longer than expected,
+you can update the `FILENAME` property in the script to match an existing export, comment out the `gcloud sql export`
+line, and re-run the script.
 
 #### Stand alone seqr instance
 
@@ -77,11 +80,12 @@ always starts up with the correct configuration.
 
 ```bash
 # Mirrors production configuration
-export ANALYST_PROJECT_CATEGORY=analyst-projects
-export ANALYST_USER_GROUP=analysts
-export PM_USER_GROUP=project-managers
+export INTERNAL_NAMESPACES=gregor-consortium,seqr-access
+export ANALYST_USER_GROUP=TGG_Users
+export PM_USER_GROUP=TGG_PM
     
 # Set the client ID and secret for the seqr-local OAuth client (from GCP)
+# Note: do not use the values from `seqr-secrets` in secret manager, the local credentials are saved [here](https://console.cloud.google.com/apis/credentials?project=seqr-project).
 export SOCIAL_AUTH_GOOGLE_OAUTH2_CLIENT_ID=
 export SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET=   
     
@@ -92,7 +96,7 @@ export SEQR_ES_PASSWORD=
 
 ## Run seqr
 
-In order to run seqr, you need to have 2 sevrers running simultaneously, one for the client-side javascript and one
+In order to run seqr, you need to have 2 servers running simultaneously, one for the client-side javascript and one
 for the server-side python
  
 ### Prerequisites
@@ -112,7 +116,7 @@ Before running seqr, make sure the following are currently running/ started:
   - If you want ES running but do not need production data/ are working with a standalone seqr instance, 
   use docker-compose
     ```bash
-    docker-compose up elasticsearch
+    docker compose up elasticsearch
     ```
     
 ### Run ui asset server

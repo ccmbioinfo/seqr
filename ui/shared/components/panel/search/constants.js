@@ -3,7 +3,7 @@ import { Form } from 'semantic-ui-react'
 import styled from 'styled-components'
 
 import { CreateLocusListButton } from 'shared/components/buttons/LocusListButtons'
-import { RadioGroup, AlignedBooleanCheckbox, Select } from 'shared/components/form/Inputs'
+import { RadioGroup, AlignedBooleanCheckbox, Select, InlineToggle } from 'shared/components/form/Inputs'
 import { snakecaseToTitlecase, camelcaseToTitlecase } from 'shared/utils/stringUtils'
 import {
   VEP_GROUP_NONSENSE,
@@ -20,14 +20,17 @@ import {
   LOCUS_LIST_ITEMS_FIELD,
   AFFECTED,
   UNAFFECTED,
-  PREDICTOR_FIELDS,
+  ORDERED_PREDICTOR_FIELDS,
   SPLICE_AI_FIELD,
   VEP_GROUP_SV_NEW,
   PANEL_APP_CONFIDENCE_LEVELS,
+  SCREEN_LABELS,
+  predictorColorRanges,
 } from 'shared/utils/constants'
 
 import LocusListItemsFilter from './LocusListItemsFilter'
 import PaMoiSelector from './PaMoiSelector'
+import PaLocusListSelector from './PaLocusListSelector'
 
 export const getSelectedAnalysisGroups = (
   analysisGroupsByGuid, familyGuids,
@@ -243,7 +246,95 @@ export const ANNOTATION_GROUPS = Object.entries(GROUPED_VEP_CONSEQUENCES).map(([
   name, options, groupLabel: snakecaseToTitlecase(name),
 }))
 
-export const ALL_IMPACT_GROUPS = [
+const SCREEN_GROUP = 'SCREEN'
+const SCREEN_VALUES = ['PLS', 'pELS', 'dELS', 'DNase-H3K4me3', 'CTCF-only', 'DNase-only', 'low-DNase']
+const UTR_ANNOTATOR_GROUP = 'UTRAnnotator'
+const UTR_ANNOTATOR_VALUES = [
+  'premature_start_codon_gain', 'premature_start_codon_loss', 'stop_codon_gain', 'stop_codon_loss', 'uORF_frameshift',
+]
+const MOTIF_GROUP = 'motif_feature'
+const MOTIF_VALUES = [
+  {
+    description: 'A feature ablation whereby the deleted region includes a transcription factor binding site',
+    text: 'TFBS ablation',
+    value: 'TFBS_ablation',
+    so: 'SO:0001895',
+  },
+  {
+    description: 'A feature amplification of a region containing a transcription factor binding site',
+    text: 'TFBS amplification',
+    value: 'TFBS_amplification',
+    so: 'SO:0001892',
+  },
+  {
+    description: 'In regulatory region annotated by Ensembl',
+    text: 'TF binding site variant',
+    value: 'TF_binding_site_variant',
+    so: 'SO:0001782',
+  },
+  {
+    description: 'A fusion impacting a transcription factor binding site',
+    text: 'TFBS fusion',
+    value: 'TFBS_fusion',
+  },
+  {
+    description: 'A translocation impacting a transcription factor binding site',
+    text: 'TFBS translocation',
+    value: 'TFBS_translocation',
+  },
+]
+const REGULATORY_GROUP = 'regulatory_feature'
+const REGULATORY_VALUES = [
+  {
+    description: 'A sequence variant located within a regulatory region',
+    text: 'Regulatory region variant',
+    value: 'regulatory_region_variant',
+    so: 'SO:0001566',
+  },
+  {
+    description: 'A feature ablation whereby the deleted region includes a regulatory region',
+    text: 'Regulatory region ablation',
+    value: 'regulatory_region_ablation',
+    so: 'SO:0001894',
+  },
+  {
+    description: 'A feature amplification of a region containing a regulatory region',
+    text: 'Regulatory region amplification',
+    value: 'regulatory_region_amplification',
+    so: 'SO:0001891',
+  },
+  {
+    description: 'A fusion impacting a regulatory region',
+    text: 'Regulatory region fusion',
+    value: 'regulatory_region_fusion',
+  },
+]
+ANNOTATION_GROUPS.push({
+  name: SCREEN_GROUP,
+  groupLabel: SCREEN_GROUP,
+  options: SCREEN_VALUES.map(value => ({
+    value,
+    text: SCREEN_LABELS[value] || value,
+    description: 'SCREEN: Search Candidate cis-Regulatory Elements by ENCODE. Registry of cCREs V3’',
+  })),
+}, {
+  name: UTR_ANNOTATOR_GROUP,
+  groupLabel: UTR_ANNOTATOR_GROUP,
+  options: UTR_ANNOTATOR_VALUES.map(value => ({
+    value: `5_prime_UTR_${value}_variant`,
+    text: snakecaseToTitlecase(value),
+  })),
+}, {
+  name: MOTIF_GROUP,
+  groupLabel: snakecaseToTitlecase(MOTIF_GROUP),
+  options: MOTIF_VALUES,
+}, {
+  name: REGULATORY_GROUP,
+  groupLabel: snakecaseToTitlecase(REGULATORY_GROUP),
+  options: REGULATORY_VALUES,
+})
+
+const ALL_IMPACT_GROUPS = [
   VEP_GROUP_NONSENSE,
   VEP_GROUP_ESSENTIAL_SPLICE_SITE,
   VEP_GROUP_EXTENDED_SPLICE_SITE,
@@ -255,23 +346,32 @@ export const ALL_IMPACT_GROUPS = [
   VEP_GROUP_SV,
   VEP_GROUP_SV_CONSEQUENCES,
 ]
-export const HIGH_IMPACT_GROUPS = [
+const HIGH_IMPACT_GROUPS = [
   VEP_GROUP_NONSENSE,
   VEP_GROUP_ESSENTIAL_SPLICE_SITE,
   VEP_GROUP_FRAMESHIFT,
 ]
-export const HIGH_IMPACT_GROUPS_SPLICE = [
-  ...HIGH_IMPACT_GROUPS,
+export const ANNOTATION_OVERRIDE_GROUPS = [
   SPLICE_AI_FIELD,
+  MOTIF_GROUP,
+  REGULATORY_GROUP,
+  SCREEN_GROUP,
+  UTR_ANNOTATOR_GROUP,
 ]
-export const MODERATE_IMPACT_GROUPS = [
+export const HIGH_MODERATE_IMPACT_GROUPS = [
+  ...HIGH_IMPACT_GROUPS,
   VEP_GROUP_MISSENSE,
   VEP_GROUP_INFRAME,
 ]
-export const CODING_IMPACT_GROUPS = [
+const CODING_IMPACT_GROUPS = [
   VEP_GROUP_SYNONYMOUS,
   VEP_GROUP_EXTENDED_SPLICE_SITE,
 ]
+export const CODING_OTHER_IMPACT_GROUPS = [
+  ...CODING_IMPACT_GROUPS,
+  VEP_GROUP_OTHER,
+]
+
 export const ALL_ANNOTATION_FILTER = {
   text: 'All',
   vepGroups: ALL_IMPACT_GROUPS,
@@ -285,11 +385,11 @@ export const ANNOTATION_FILTER_OPTIONS = [
   },
   {
     text: 'Moderate to High Impact',
-    vepGroups: HIGH_IMPACT_GROUPS.concat(MODERATE_IMPACT_GROUPS),
+    vepGroups: HIGH_MODERATE_IMPACT_GROUPS,
   },
   {
     text: 'All rare coding variants',
-    vepGroups: HIGH_IMPACT_GROUPS.concat(MODERATE_IMPACT_GROUPS).concat(CODING_IMPACT_GROUPS),
+    vepGroups: HIGH_MODERATE_IMPACT_GROUPS.concat(CODING_IMPACT_GROUPS),
   },
 ].map(({ vepGroups, ...option }) => ({
   ...option,
@@ -307,6 +407,7 @@ export const ALL_ANNOTATION_FILTER_DETAILS =
 
 export const THIS_CALLSET_FREQUENCY = 'callset'
 export const SV_CALLSET_FREQUENCY = 'sv_callset'
+export const TOPMED_FREQUENCY = 'topmed'
 export const SNP_FREQUENCIES = [
   {
     name: 'gnomad_genomes',
@@ -321,7 +422,7 @@ export const SNP_FREQUENCIES = [
     labelHelp: 'Filter by allele count (AC) or homozygous/hemizygous count (H/H) among gnomAD exomes, or by allele frequency (popmax AF) in any one of these five subpopulations defined for gnomAD exomes: AFR, AMR, EAS, NFE, SAS',
   },
   {
-    name: 'topmed',
+    name: TOPMED_FREQUENCY,
     label: 'TOPMed',
     homHemi: false,
     labelHelp: 'Filter by allele count (AC) or allele frequency (AF) in TOPMed',
@@ -329,7 +430,7 @@ export const SNP_FREQUENCIES = [
   {
     name: THIS_CALLSET_FREQUENCY,
     label: 'This Callset',
-    homHemi: false,
+    homHemi: true,
     labelHelp: 'Filter by allele count (AC) or by allele frequency (AF) among the samples in this family plus the rest of the samples that were joint-called as part of variant calling for this project.',
   },
 ]
@@ -364,6 +465,7 @@ export const FREQUENCIES = [...SNP_FREQUENCIES, ...MITO_FREQUENCIES, ...SV_FREQU
 
 export const LOCUS_FIELD_NAME = 'locus'
 export const PANEL_APP_FIELD_NAME = 'panelAppItems'
+export const SELECTED_MOIS_FIELD_NAME = 'selectedMOIs'
 const VARIANT_FIELD_NAME = 'rawVariantItems'
 const PANEL_APP_COLORS = [...new Set(
   Object.entries(PANEL_APP_CONFIDENCE_LEVELS).sort((a, b) => b[0] - a[0]).map(config => config[1]),
@@ -385,9 +487,11 @@ export const LOCATION_FIELDS = [
     label: color === 'none' ? 'Genes' : `${camelcaseToTitlecase(color)} Genes`,
     labelHelp: 'A list of genes, can be separated by commas or whitespace',
     component: LocusListItemsFilter,
+    filterComponent: PaLocusListSelector,
     width: 3,
     shouldShow: locus => !!locus[PANEL_APP_FIELD_NAME],
     shouldDisable: locus => !!locus[VARIANT_FIELD_NAME],
+    color,
   })),
   {
     name: VARIANT_FIELD_NAME,
@@ -398,7 +502,7 @@ export const LOCATION_FIELDS = [
     shouldDisable: locus => !!locus[LOCUS_LIST_ITEMS_FIELD.name] || !!locus[PANEL_APP_FIELD_NAME],
   },
   {
-    name: PANEL_APP_FIELD_NAME,
+    name: SELECTED_MOIS_FIELD_NAME,
     label: 'Modes of Inheritance',
     labelHelp: 'Filter the Gene List based on Modes of Inheritance from Panel App',
     component: LocusListItemsFilter,
@@ -427,48 +531,58 @@ export const LOCATION_FIELDS = [
   },
 ]
 
-export const IN_SILICO_FIELDS = PREDICTOR_FIELDS.filter(({ displayOnly }) => !displayOnly).map(
-  ({ field, fieldTitle, warningThreshold, dangerThreshold, indicatorMap, group, min, max }) => {
-    const label = fieldTitle || snakecaseToTitlecase(field)
-    const filterField = { name: field, label, group }
+const REQUIRE_SCORE_FIELD = {
+  name: 'requireScore',
+  component: AlignedBooleanCheckbox,
+  label: 'Require Filtered Predictor',
+  labelHelp: 'Only return variants where at least one filtered predictor is present. By default, variants are returned if a predictor meets the filtered value or is missing entirely',
+}
+export const IN_SILICO_FIELDS = [
+  REQUIRE_SCORE_FIELD,
+  ...ORDERED_PREDICTOR_FIELDS.filter(({ displayOnly }) => !displayOnly).map(
+    ({ field, fieldTitle, thresholds, reverseThresholds, indicatorMap, group, min, max, requiresCitation }) => {
+      const label = fieldTitle || snakecaseToTitlecase(field)
+      const filterField = { name: field, label, group }
 
-    if (indicatorMap) {
+      if (indicatorMap) {
+        return {
+          labelHelp: `Select a value for ${label}`,
+          component: Select,
+          options: [
+            { text: '', value: null },
+            ...Object.entries(indicatorMap).map(([val, { value, ...opt }]) => ({ value: val, text: value, ...opt })),
+          ],
+          ...filterField,
+        }
+      }
+
+      const labelHelp = (
+        <div>
+          {`Enter a numeric cutoff for ${label}`}
+          {thresholds && predictorColorRanges(thresholds, requiresCitation, reverseThresholds)}
+        </div>
+      )
       return {
-        labelHelp: `Select a value for ${label}`,
-        component: Select,
-        options: [
-          { text: '', value: null },
-          ...Object.entries(indicatorMap).map(([val, { value, ...opt }]) => ({ value: val, text: value, ...opt })),
-        ],
+        labelHelp,
+        control: Form.Input,
+        type: 'number',
+        min: min || 0,
+        max: max || 1,
+        step: max ? 1 : 0.05,
         ...filterField,
       }
-    }
-
-    const labelHelp = (
-      <div>
-        {`Enter a numeric cutoff for ${label}`}
-        {dangerThreshold && (
-          <div>
-            Thresholds:
-            <div>{`Red > ${dangerThreshold}`}</div>
-            <div>{`Yellow > ${warningThreshold}`}</div>
-          </div>
-        )}
-      </div>
-    )
-    return {
-      labelHelp,
-      control: Form.Input,
-      type: 'number',
-      min: min || 0,
-      max: max || 1,
-      step: max ? 1 : 0.05,
-      ...filterField,
-    }
-  },
-)
+    },
+  )]
 
 export const SNP_QUALITY_FILTER_FIELDS = [
+  {
+    name: 'affected_only',
+    label: 'Affected Only',
+    labelHelp: 'Only apply quality filters to affected individuals',
+    control: InlineToggle,
+    color: 'grey',
+    width: 6,
+  },
   {
     name: 'vcf_filter',
     label: 'Filter Value',
@@ -525,10 +639,10 @@ export const SV_QUALITY_FILTER_FIELDS = [
   {
     name: 'min_gq_sv',
     label: 'WGS SV Genotype Quality',
-    labelHelp: 'The genotype quality (GQ) represents the quality of a Structural Variant call. Recommended SV-QG cutoffs for filtering: > 10.',
+    labelHelp: 'The genotype quality (GQ) represents the quality of a Structural Variant call. Recommended SV-GQ cutoffs for filtering: > 10.',
     min: 0,
     max: 100,
-    step: 10,
+    step: 5,
   },
 ]
 
