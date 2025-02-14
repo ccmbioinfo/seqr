@@ -209,7 +209,7 @@ def igv_genomes_proxy(request, file_path):
     range_header = request.META.get('HTTP_RANGE')
     if range_header:
         headers['Range'] = range_header
-
+    headers["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0"
     genome_response = requests.get('https://s3.amazonaws.com/igv.{}'.format(file_path), headers=headers)
     proxy_response = HttpResponse(
         content=genome_response.content,
