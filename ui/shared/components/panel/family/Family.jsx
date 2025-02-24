@@ -12,7 +12,7 @@ import OptionFieldView from '../view-fields/OptionFieldView'
 import ListFieldView from '../view-fields/ListFieldView'
 import NoteListFieldView from '../view-fields/NoteListFieldView'
 import SingleFieldView from '../view-fields/SingleFieldView'
-import TagFieldView from '../view-fields/TagFieldView'
+import TagFieldView, { TagFieldDisplay } from '../view-fields/TagFieldView'
 import TextFieldView from '../view-fields/TextFieldView'
 import { InlineHeader } from '../../StyledComponents'
 import {
@@ -26,13 +26,16 @@ import {
   FAMILY_FIELD_SUCCESS_STORY_TYPE,
   FAMILY_FIELD_FIRST_SAMPLE,
   FAMILY_FIELD_NAME_LOOKUP,
-  FAMILY_FIELD_OMIM_NUMBER,
+  FAMILY_FIELD_DISCOVERY_MONDO_ID,
+  FAMILY_FIELD_OMIM_NUMBERS,
   FAMILY_FIELD_PMIDS, FAMILY_FIELD_DESCRIPTION, FAMILY_FIELD_SUCCESS_STORY, FAMILY_NOTES_FIELDS,
-  FAMILY_FIELD_CODED_PHENOTYPE, FAMILY_FIELD_INTERNAL_NOTES, FAMILY_FIELD_INTERNAL_SUMMARY,
-  FAMILY_FIELD_ANALYSIS_GROUPS,
+  FAMILY_FIELD_CODED_PHENOTYPE, FAMILY_FIELD_INTERNAL_NOTES, FAMILY_FIELD_INTERNAL_SUMMARY, FAMILY_EXTERNAL_DATA_LOOKUP,
+  FAMILY_FIELD_ANALYSIS_GROUPS, FAMILY_FIELD_MONDO_ID, FAMILY_FIELD_EXTERNAL_DATA, FAMILY_EXTERNAL_DATA_OPTIONS,
 } from '../../../utils/constants'
 import { FirstSample, AnalystEmailDropdown, AnalysedBy, AnalysisGroups, analysisStatusIcon } from './FamilyFields'
 import FamilyLayout from './FamilyLayout'
+
+const FAMILY_NAME_FIELD_PROPS = { label: 'Name' }
 
 const ASSIGNED_ANALYST_EDIT_FIELDS = [
   {
@@ -58,6 +61,15 @@ const getNoteField = noteType => ({
   submitArgs: { noteType, nestedField: 'note' },
   ...BASE_NOTE_FIELD,
 })
+
+const MONDO_FIELD = {
+  component: SingleFieldView,
+  fieldDisplay: value => (
+    <a target="_blank" rel="noreferrer" href={`http://purl.obolibrary.org/obo/MONDO_${value.replace('MONDO:', '')}`}>
+      {value}
+    </a>
+  ),
+}
 
 const FAMILY_FIELD_RENDER_LOOKUP = {
   [FAMILY_FIELD_ANALYSIS_GROUPS]: {
@@ -89,6 +101,13 @@ const FAMILY_FIELD_RENDER_LOOKUP = {
       <AnalysedBy analysedByList={analysedByList} compact={compact} familyGuid={familyGuid} />
     ),
   },
+  [FAMILY_FIELD_EXTERNAL_DATA]: {
+    internal: true,
+    component: TagFieldView,
+    tagOptions: FAMILY_EXTERNAL_DATA_OPTIONS,
+    simplifiedValue: true,
+    fieldDisplay: value => <TagFieldDisplay displayFieldValues={value} tagLookup={FAMILY_EXTERNAL_DATA_LOOKUP} />,
+  },
   [FAMILY_FIELD_SUCCESS_STORY_TYPE]: {
     internal: true,
     component: TagFieldView,
@@ -103,10 +122,50 @@ const FAMILY_FIELD_RENDER_LOOKUP = {
     fieldDisplay: (loadedSample, compact, familyGuid) => <FirstSample familyGuid={familyGuid} compact={compact} />,
   },
   [FAMILY_FIELD_CODED_PHENOTYPE]: { component: SingleFieldView, canEdit: true },
-  [FAMILY_FIELD_OMIM_NUMBER]: {
+  [FAMILY_FIELD_MONDO_ID]: {
+    ...MONDO_FIELD,
     canEdit: true,
-    component: SingleFieldView,
-    fieldDisplay: value => <a target="_blank" rel="noreferrer" href={`https://www.omim.org/entry/${value}`}>{value}</a>,
+  },
+  [FAMILY_FIELD_DISCOVERY_MONDO_ID]: {
+    ...MONDO_FIELD,
+    internal: true,
+    canEditFamily: ({ discoveryTags }) => discoveryTags?.length > 0,
+  },
+  [FAMILY_FIELD_OMIM_NUMBERS]: {
+    canEditFamily: ({ postDiscoveryOmimOptions }) => Object.keys(postDiscoveryOmimOptions || {}).length > 0,
+    component: OptionFieldView,
+    multiple: true,
+    tagOptionLookupField: 'postDiscoveryOmimOptions',
+    tagOptionSortField: 'category',
+    formatTagOption: ({ phenotypeMimNumber, phenotypes }) => ({
+      value: phenotypeMimNumber,
+      category: (phenotypes || []).some(({ geneSymbol }) => geneSymbol) ? 'Gene-Related Conditions' : 'Genomic Region Conditions',
+      description: (phenotypes || []).map((
+        { geneSymbol, phenotypeDescription, chrom, start, end },
+      ) => `${geneSymbol || `${chrom}:${start}-${end}`}: ${phenotypeDescription}`).join('; '),
+    }),
+    formFieldProps: {
+      includeCategories: true,
+    },
+    tagAnnotation: ({ phenotypeMimNumber, phenotypes }) => (
+      <span>
+        <a target="_blank" rel="noreferrer" href={`https://www.omim.org/entry/${phenotypeMimNumber}`}>
+          {phenotypeMimNumber}
+        </a>
+        :&nbsp;
+        {(phenotypes || []).map(
+          ({ geneSymbol, phenotypeDescription, phenotypeInheritance }, i) => (
+            <span key={phenotypeDescription}>
+              {i !== 0 && '; '}
+              <b>{geneSymbol}</b>
+              &nbsp;
+              {phenotypeDescription}
+              {phenotypeInheritance && <i>{` (${phenotypeInheritance})`}</i>}
+            </span>
+          ),
+        )}
+      </span>
+    ),
   },
   [FAMILY_FIELD_PMIDS]: {
     internal: true,
@@ -136,18 +195,22 @@ class Family extends React.PureComponent {
     annotation: PropTypes.node,
     disableEdit: PropTypes.bool,
     disableInternalEdit: PropTypes.bool,
+    toggleDetails: PropTypes.func,
   }
 
   familyField = (field) => {
     const { family, compact, disableEdit, updateFamily: dispatchUpdateFamily, disableInternalEdit } = this.props
-    const { submitArgs, component, canEdit, internal, ...fieldProps } = FAMILY_FIELD_RENDER_LOOKUP[field.id]
+    const {
+      submitArgs, component, canEdit, canEditFamily, internal, ...fieldProps
+    } = FAMILY_FIELD_RENDER_LOOKUP[field.id]
 
     const name = FAMILY_FIELD_NAME_LOOKUP[field.id]
     const submitFunc = submitArgs ?
       values => dispatchUpdateFamily({ ...values, ...submitArgs }) : dispatchUpdateFamily
     return React.createElement(component || TextFieldView, {
       key: field.id,
-      isEditable: !disableEdit && (canEdit || (!disableInternalEdit && internal)),
+      isEditable: !disableEdit && (canEditFamily ? canEditFamily(family) :
+        (canEdit || (!disableInternalEdit && internal))),
       isPrivate: internal,
       fieldName: compact ? null : name,
       field: field.id,
@@ -160,25 +223,38 @@ class Family extends React.PureComponent {
     })
   }
 
+  familyHeader = () => {
+    const { family, showFamilyPageLink } = this.props
+    const content = showFamilyPageLink ?
+      <Link to={`/project/${family.projectGuid}/family_page/${family.familyGuid}`}>{family.displayName}</Link> :
+      family.displayName
+    return <InlineHeader size="small" content={content} />
+  }
+
   render() {
     const {
       project, family, fields, rightContent, compact, useFullWidth, disablePedigreeZoom, disableEdit,
-      showFamilyPageLink, annotation, hidePedigree,
+      annotation, hidePedigree, toggleDetails, updateFamily: dispatchUpdateFamily,
     } = this.props
 
     if (!family) {
       return <div>Family Not Found</div>
     }
 
+    const isEditable = !disableEdit && project.canEdit
+
     let leftContent = null
     if (!hidePedigree) {
       const familyHeader = (
-        <InlineHeader
-          key="name"
-          size="small"
-          content={showFamilyPageLink ?
-            <Link to={`/project/${family.projectGuid}/family_page/${family.familyGuid}`}>{family.displayName}</Link> :
-            family.displayName}
+        <BaseFieldView
+          field="familyId"
+          idField="familyGuid"
+          initialValues={family}
+          fieldDisplay={this.familyHeader}
+          isEditable={isEditable && !!project.workspaceName && !project.isAnalystProject}
+          formFieldProps={FAMILY_NAME_FIELD_PROPS}
+          modalTitle={`Edit Family ${family.displayName}`}
+          onSubmit={dispatchUpdateFamily}
         />
       )
       leftContent = (
@@ -189,15 +265,15 @@ class Family extends React.PureComponent {
               {`(${family.individualGuids.length})`}
             </span>
           ) : (
-            <div key="header">
+            <span key="header">
               {familyHeader}
               <PedigreeImagePanel
                 key="pedigree"
                 family={family}
                 disablePedigreeZoom={disablePedigreeZoom}
-                isEditable={!disableEdit && project.canEdit}
+                isEditable={isEditable}
               />
-            </div>
+            </span>
           )}
         </span>
       )
@@ -212,6 +288,7 @@ class Family extends React.PureComponent {
         fieldDisplay={this.familyField}
         leftContent={leftContent}
         rightContent={rightContent}
+        toggleDetails={toggleDetails}
       />
     )
   }

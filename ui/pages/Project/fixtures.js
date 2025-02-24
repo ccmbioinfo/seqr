@@ -282,6 +282,7 @@ export const STATE_WITH_2_FAMILIES = {
       caseReviewStatusLastModifiedDate: '2016-12-06T10:28:00.000Z',
       createdDate: '2016-12-06T10:28:00.000Z',
       sampleGuids: ['S2310656_wal_mc16200_mc16203'],
+      igvSampleGuids: ['IS2310656_wal_mc16200_mc16203'],
       sex: 'F',
     },
     I021475_na19675_2: {
@@ -314,7 +315,7 @@ export const STATE_WITH_2_FAMILIES = {
       createdDate: "2018-03-30T11:50:40.079Z",
       datasetFilePath: "gs://seqr-datasets/GRCh37/cmg_sankaran_wes/CMG_MYOSEQ.vcf.gz",
       datasetName: null,
-      datasetType: "VARIANTS",
+      datasetType: "SNV_INDEL",
       familyGuid: 'F011652_2',
       individualGuid: "I021476_na19678_2",
       loadedDate: "2018-03-13T13:25:21.551Z",
@@ -323,6 +324,14 @@ export const STATE_WITH_2_FAMILIES = {
       sampleId: "WAL_MC16200_MC16203",
       isActive: true,
       sampleType: "WES",
+    },
+  },
+  igvSamplesByGuid: {
+    IS2310656_wal_mc16200_mc16203: {
+      projectGuid: 'R0237_1000_genomes_demo',
+      individualGuid: 'I021476_na19678_2',
+      sampleGuid: 'IS2310656_wal_mc16200_mc16203',
+      filePath: 'gs://seqr-datasets/GRCh37/cmg_sankaran_wes/CMG_MYOSEQ_MC16203.cram',
     },
   },
   analysisGroupsByGuid: {
@@ -406,6 +415,7 @@ export const STATE_WITH_2_FAMILIES = {
     displayName: 'Test User',
   },
   savedVariantTableState: { hideExcluded: true, recordsPerPage: 1 },
+  projectCollaboratorsLoading: {},
   projectSavedVariantsLoading: {},
   familyDetailsLoading: {},
   savedVariantsByGuid: {
@@ -881,7 +891,6 @@ export const STATE_WITH_2_FAMILIES = {
     MS021475_na19675_1: {
       submissionGuid: 'MS021475_na19675_1',
       individualGuid: 'I021475_na19675_1',
-      mmeResultGuids: ['MR0005038_HK018_0047','MR0004688_RGP_105_3'],
       createdDate: '2018-05-09T10:29:00.000Z',
       submissionId: 'NA19675_1',
       contactHref: 'mailto:matchmaker@broadinstitute.org,test@test.com',
@@ -891,8 +900,8 @@ export const STATE_WITH_2_FAMILIES = {
         {id: "HP:0001371", label: "Flexion contracture", observed: "yes"}
       ],
       geneVariants: [
-        { geneId: "ENSG00000228198", alt: 'T', ref: 'TC', chrom: '1', pos: 248367227 },
-        { geneId: "ENSG00000228198", alt: null, ref: null, chrom: '1', pos: 248367227, end: 248369100 }
+        { geneId: "ENSG00000228198", variantGuid: 'SV0000004_116042722_r0390_1000' },
+        { geneId: "ENSG00000228198", variantGuid: 'SV0000002_SV48367227_r0390_100' },
       ],
     }
   },
@@ -1012,6 +1021,33 @@ export const STATE_WITH_2_FAMILIES = {
       isAnalyst: true,
       lastName: '',
       username: 'test_user2',
+    },
+  },
+  rnaSeqDataByIndividual: {
+    I021476_na19678_1: {
+      outliers: {
+        ENSG00000228198: [{ isSignificant: true, pValue: 0.0004 }],
+        ENSG00000164458: [{ isSignificant: true, pValue: 0.0073 }],
+      },
+    },
+    I021474_na19679_1: {
+      outliers: {
+        ENSG00000228198: [{ isSignificant: true, pValue: 0.01 }],
+        ENSG00000164458: [{ isSignificant: false, pValue: 0.73 }],
+      },
+    },
+    I021476_na19678_2: { outliers: { ENSG00000228198: [{ isSignificant: true, pValue: 0.0214 }] } },
+  },
+  phenotypeGeneScoresByIndividual: {
+    I021476_na19678_1: {
+      ENSG00000228198: {
+        lirical: [{
+          diseaseId: 'OMIM:618460',
+          diseaseName: 'Khan-Khan-Katsanis syndrome',
+          rank: 1,
+          scores: { compositeLR: 0.066, post_test_probability: 0 },
+        }],
+      },
     },
   },
 }

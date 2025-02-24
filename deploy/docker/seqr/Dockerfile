@@ -1,6 +1,4 @@
-FROM python:3.7-slim-bullseye as build
-
-LABEL maintainer="Broad TGG"
+FROM python:3.9-slim-bullseye AS build
 
 # install commmon utilities, database clients for debugging
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -36,8 +34,8 @@ COPY ./requirements.txt .
 
 # install seqr python dependencies
 RUN pip install --no-cache-dir wheel && \
-    pip install --no-cache-dir -r requirements.txt && \
-    ln -s python3 /opt/venv/bin/python3.7
+    pip install --no-cache-dir -U setuptools && \
+    pip install --no-cache-dir -r requirements.txt
 
 # install seqr nodejs dependencies
 WORKDIR /build/ui
@@ -50,7 +48,10 @@ COPY ./ui/ .
 
 RUN npm run build
 
-FROM python:3.7-slim-bullseye as runtime
+FROM python:3.9-slim-bullseye AS runtime
+LABEL org.opencontainers.image.source="https://github.com/ccmbioinfo/seqr"
+LABEL org.opencontainers.image.authors="Centre for Computational Medicine, Hospital for Sick Children"
+LABEL org.opencontainers.image.title="ccm-seqr"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -73,20 +74,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN echo "deb http://packages.cloud.google.com/apt cloud-sdk-bullseye main" > /etc/apt/sources.list.d/google-cloud-sdk.list \
     && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
     && apt-get update && apt-get install -y --no-install-recommends \
-        google-cloud-sdk \
+    google-cloud-sdk \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /opt/venv /opt/venv
 
 WORKDIR /seqr
-COPY . .
+COPY admin/ ./admin
+COPY matchmaker/ ./matchmaker
+COPY panelapp/ ./panelapp
+COPY reference_data/ ./reference_data
+COPY seqr/ ./seqr
+COPY manage.py settings.py wsgi.py ./
 COPY --from=build /build/ui/dist /seqr/ui/dist
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-COPY logs/django /var/log/django
+RUN mkdir /var/log/django
 RUN ./manage.py collectstatic --no-input
 
 EXPOSE 8000
@@ -94,6 +100,7 @@ EXPOSE 8000
 ENV TERM=xterm
 
 COPY deploy/docker/seqr/readiness_probe /
+COPY deploy/docker/seqr/wait_for_routes /
 COPY deploy/docker/seqr/bin/*.sh /usr/local/bin/
 COPY deploy/docker/seqr/config/*.py ./
 COPY deploy/docker/seqr/bashrc /root/.bashrc

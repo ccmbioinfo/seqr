@@ -14,13 +14,13 @@ import { copy_dataset as copyPedigreeDataset, messages as pedigreeMessages } fro
 
 import { getIndividualsByFamily } from 'redux/selectors'
 import { openModal } from 'redux/utils/modalReducer'
-import { INDIVIDUAL_FIELD_CONFIGS, INDIVIDUAL_FIELD_SEX, AFFECTED } from 'shared/utils/constants'
+import { INDIVIDUAL_FIELD_CONFIGS, INDIVIDUAL_FIELD_SEX, AFFECTED, SIMPLIFIED_SEX_LOOKUP } from 'shared/utils/constants'
 import { snakecaseToTitlecase } from 'shared/utils/stringUtils'
 import FormWrapper from '../../form/FormWrapper'
 import { BooleanCheckbox, InlineToggle, RadioGroup, YearSelector } from '../../form/Inputs'
 import Modal from '../../modal/Modal'
 import { NoBorderTable, FontAwesomeIconsContainer, ButtonLink } from '../../StyledComponents'
-import { EditPedigreeImageButton, DeletePedigreeImageButton, SavePedigreeDatasetButton } from './PedigreeImageButtons'
+import { EditPedigreeImageButton, DeletePedigreeImageButton, SavePedigreeDatasetButton, ResetPedigreeDatasetButton } from './PedigreeImageButtons'
 
 const PedigreeImg = styled.img.attrs({ alt: 'pedigree' })`
   max-height: ${props => props.maxHeight}px;
@@ -84,7 +84,7 @@ const INDIVIDUAL_FIELD_MAP = {
 const PEDIGREE_JS_OPTS = {
   background: '#fff',
   diseases: [],
-  labels: ['label', 'age'],
+  labels: ['label', 'age', 'aneuploidy'],
   zoomIn: 3,
   zoomOut: 3,
   zoomSrc: ['button'],
@@ -180,6 +180,12 @@ class BasePedigreeImage extends React.PureComponent {
           val = val === AFFECTED
         } else if (key === 'status') {
           val = (!!val || val === 0) ? 1 : 0
+        } else if (key === 'sex') {
+          const aneuploidy = val
+          val = SIMPLIFIED_SEX_LOOKUP[val]
+          if (aneuploidy !== val) {
+            acc.aneuploidy = aneuploidy
+          }
         } else if (!val && (key === 'mother' || key === 'father')) {
           return acc
         }
@@ -275,6 +281,11 @@ class BasePedigreeImage extends React.PureComponent {
                   getPedigreeDataset={this.getPedigreeDataset}
                 />
               </Table.Cell>
+              {family.pedigreeDataset && (
+                <Table.Cell collapsing>
+                  <ResetPedigreeDatasetButton familyGuid={family.familyGuid} />
+                </Table.Cell>
+              )}
             </Table.Row>
           </Table.Body>
         </NoBorderTable>

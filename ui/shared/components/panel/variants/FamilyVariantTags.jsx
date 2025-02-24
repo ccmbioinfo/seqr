@@ -2,19 +2,23 @@ import React from 'react'
 import PropTypes from 'prop-types'
 import { connect } from 'react-redux'
 import { NavLink } from 'react-router-dom'
-import { Icon, Popup, Table } from 'semantic-ui-react'
+import { Icon, Popup, Table, Label } from 'semantic-ui-react'
 import styled from 'styled-components'
 
 import { updateVariantNote, updateVariantTags } from 'redux/rootReducer'
 import {
   getFamiliesByGuid,
   getVariantTagNotesByFamilyVariants,
-  getTagTypesByProject,
+  getSelectableTagTypesByProject,
   getFunctionalTagTypesTypesByProject,
   getVariantId,
+  getMmeSubmissionsByGuid,
+  getGenesById,
+  getUser,
 } from 'redux/selectors'
-import { DISCOVERY_CATEGORY_NAME } from 'shared/utils/constants'
-import AcmgModal from '../acmg/AcmgModal'
+import { DISCOVERY_CATEGORY_NAME, MME_TAG_NAME, GREGOR_FINDING_TAG_NAME } from 'shared/utils/constants'
+import { snakecaseToTitlecase } from 'shared/utils/stringUtils'
+import VariantClassify from './VariantClassify'
 import PopupWithModal from '../../PopupWithModal'
 import { HorizontalSpacer } from '../../Spacers'
 import { NoBorderTable, InlineHeader } from '../../StyledComponents'
@@ -29,44 +33,66 @@ const TagTitle = styled.span`
   color: #999;
 `
 
-const RedItal = styled.i`
-  color: red;
-`
-
 const NO_DISPLAY = { display: 'none' }
 
 const SHORTCUT_TAGS = ['Review', 'Excluded']
 
 const VARIANT_NOTE_FIELDS = [{
-  name: 'submitToClinvar',
-  label: (
-    <label>
-      Add to
-      <RedItal>&nbsp; ClinVar &nbsp;</RedItal>
-      submission
-    </label>
-  ),
-  component: BooleanCheckbox,
-  style: { paddingTop: '2em' },
-},
-{
   name: 'saveAsGeneNote',
   label: 'Add to public gene notes',
   component: BooleanCheckbox,
 }]
+
+const ANALYST_VARIANT_NOTE_FIELDS = [{
+  name: 'report',
+  label: 'Include in report notes',
+  component: BooleanCheckbox,
+}, ...VARIANT_NOTE_FIELDS,
+]
+
+const DEPRECATED_MME_TAG = 'seqr MME (old)'
+const AIP_TAG_TYPE = 'AIP'
+const NO_EDIT_TAG_TYPES = [AIP_TAG_TYPE, GREGOR_FINDING_TAG_NAME]
+const TAG_TYPE_TILES = {
+  [AIP_TAG_TYPE]: 'Categories',
+  [GREGOR_FINDING_TAG_NAME]: 'Finding Detail',
+}
+
+const aipCategoryContent = (key, { name, date }) => ([
+  <Table.HeaderCell key="name" content={`${key} - ${name} `} />,
+  <Table.Cell key="date" disabled content={`(${new Date(date).toLocaleDateString()})`} />,
+])
+
+const structuredMetadataRow = ([key, value]) => (
+  <Table.Row key={key}>
+    {typeof value === 'string' ? [
+      <Table.HeaderCell key="key" textAlign="right" content={snakecaseToTitlecase(key)} />,
+      <Table.Cell key="value" content={value} />,
+    ] : aipCategoryContent(key, value)}
+  </Table.Row>
+)
 
 export const taggedByPopup = (tag, title) => (trigger, hideMetadata) => (
   <Popup
     position="top right"
     size="tiny"
     trigger={trigger}
-    header={title || 'Tagged by'}
+    header={title || (tag.structuredMetadata ? TAG_TYPE_TILES[tag.name] : 'Tagged by')}
     hoverable
     flowing
     content={
       <div>
-        {tag.createdBy || 'unknown user'}
-        {tag.lastModifiedDate && <span>{` on ${new Date(tag.lastModifiedDate).toLocaleDateString()}`}</span>}
+        {tag.structuredMetadata ? (
+          <NoBorderTable basic="very" compact="very">
+            <Table.Body>
+              {Object.entries(tag.structuredMetadata).filter(e => e[0] !== 'removed').map(structuredMetadataRow)}
+              {tag.structuredMetadata.removed && [
+                <Table.Row key="removedHeader"><Table.HeaderCell colSpan={2} content="Removed Categories" /></Table.Row>,
+                ...Object.entries(tag.structuredMetadata.removed).map(structuredMetadataRow),
+              ]}
+            </Table.Body>
+          </NoBorderTable>
+        ) : `${tag.createdBy || 'unknown user'}${tag.lastModifiedDate ? ` on ${new Date(tag.lastModifiedDate).toLocaleDateString()}` : ''}`}
         {tag.metadata && !hideMetadata && (
           <div>
             {tag.metadataTitle ? (
@@ -191,17 +217,47 @@ export const LoadedFamilyLabel = connect((state, ownProps) => ({
   family: getFamiliesByGuid(state)[ownProps.familyGuid],
 }))(FamilyLabel)
 
+const MatchmakerLabel = ({ variant, family, mmeSubmissionsByGuid, genesById }) => {
+  const variantSubmissions = (Array.isArray(variant) ? variant.reduce(
+    (acc, { mmeSubmissions = [] }) => ([...acc, ...mmeSubmissions]), [],
+  ) : (variant.mmeSubmissions || [])).map(
+    ({ submissionGuid, geneId }) => ({ gene: genesById[geneId], submission: mmeSubmissionsByGuid[submissionGuid] }),
+  ).filter(({ submission }) => family.individualGuids.includes(submission.individualGuid))
+  return variantSubmissions.length ? (
+    <Popup
+      content={[...new Set(variantSubmissions.map(
+        ({ gene, submission }) => `${gene.geneSymbol} submitted ${new Date(submission.lastModifiedDate).toLocaleDateString()}`,
+      ))].join('; ')}
+      trigger={<Label
+        as={NavLink}
+        to={`/project/${family.projectGuid}/family_page/${family.familyGuid}/matchmaker_exchange`}
+        target="_blank"
+        content={MME_TAG_NAME}
+        color="violet"
+        size="small"
+      />}
+    />
+  ) : null
+}
+
+MatchmakerLabel.propTypes = {
+  variant: PropTypes.oneOfType([PropTypes.object, PropTypes.array]).isRequired,
+  family: PropTypes.object.isRequired,
+  mmeSubmissionsByGuid: PropTypes.object,
+  genesById: PropTypes.object,
+}
+
 const FamilyVariantTags = React.memo(({
   variant, variantTagNotes, family, projectTagTypes, projectFunctionalTagTypes, dispatchUpdateVariantNote,
   dispatchUpdateFamilyVariantTags, dispatchUpdateFamilyVariantFunctionalTags, isCompoundHet, variantId,
-  linkToSavedVariants,
+  linkToSavedVariants, mmeSubmissionsByGuid, genesById, user,
 }) => (
   family ? (
     <NoBorderTable basic="very" compact="very" celled>
       <Table.Body>
         <Table.Row verticalAlign="top">
           {!isCompoundHet && (
-            <Table.Cell collapsing rowSpan={2}>
+            <Table.Cell collapsing>
               <FamilyLabel family={family} path={linkToSavedVariants ? `saved_variants/family/${family.familyGuid}` : null} />
             </Table.Cell>
           )}
@@ -225,8 +281,8 @@ const FamilyVariantTags = React.memo(({
               variantId={variantId}
               tagOptions={projectTagTypes}
               displayMetadata
-              linkTagType="seqr MME"
-              tagLinkUrl={`/project/${family.projectGuid}/family_page/${family.familyGuid}/matchmaker_exchange`}
+              disabledTagType={DEPRECATED_MME_TAG}
+              noEditTagTypes={NO_EDIT_TAG_TYPES}
               onSubmit={dispatchUpdateFamilyVariantTags}
             />
             <HorizontalSpacer width={5} />
@@ -247,7 +303,7 @@ const FamilyVariantTags = React.memo(({
           </Table.Cell>
           <Table.Cell collapsing textAlign="right">
             {variant.variantGuid && !Array.isArray(variant) &&
-              <AcmgModal variant={variant} familyGuid={family.familyGuid} /> }
+              <VariantClassify variant={variant} familyGuid={family.familyGuid} />}
           </Table.Cell>
           <Table.Cell collapsing textAlign="right">
             {(!Array.isArray(variant) || variantTagNotes) &&
@@ -255,6 +311,16 @@ const FamilyVariantTags = React.memo(({
           </Table.Cell>
         </Table.Row>
         <Table.Row verticalAlign="top">
+          {!isCompoundHet && (
+            <Table.Cell collapsing>
+              <MatchmakerLabel
+                family={family}
+                variant={variant}
+                mmeSubmissionsByGuid={mmeSubmissionsByGuid}
+                genesById={genesById}
+              />
+            </Table.Cell>
+          )}
           <Table.Cell collapsing textAlign="right">
             <TagTitle>Notes:</TagTitle>
           </Table.Cell>
@@ -263,7 +329,7 @@ const FamilyVariantTags = React.memo(({
               initialValues={variantTagNotes}
               modalId={family.familyGuid}
               modalTitle={`Variant Note for Family ${family.displayName}`}
-              additionalEditFields={VARIANT_NOTE_FIELDS}
+              additionalEditFields={user.isAnalyst ? ANALYST_VARIANT_NOTE_FIELDS : VARIANT_NOTE_FIELDS}
               defaultId={variantId}
               idField="variantGuids"
               isEditable
@@ -291,6 +357,9 @@ FamilyVariantTags.propTypes = {
   dispatchUpdateVariantNote: PropTypes.func.isRequired,
   dispatchUpdateFamilyVariantTags: PropTypes.func.isRequired,
   dispatchUpdateFamilyVariantFunctionalTags: PropTypes.func.isRequired,
+  mmeSubmissionsByGuid: PropTypes.object,
+  genesById: PropTypes.object,
+  user: PropTypes.object,
 }
 
 FamilyVariantTags.defaultProps = {
@@ -305,9 +374,12 @@ const mapStateToProps = (state, ownProps) => {
   return {
     variantId,
     family,
-    projectTagTypes: getTagTypesByProject(state)[projectGuid],
+    projectTagTypes: getSelectableTagTypesByProject(state)[projectGuid],
     projectFunctionalTagTypes: getFunctionalTagTypesTypesByProject(state)[projectGuid],
     variantTagNotes: ((getVariantTagNotesByFamilyVariants(state) || {})[ownProps.familyGuid] || {})[variantId],
+    mmeSubmissionsByGuid: getMmeSubmissionsByGuid(state),
+    genesById: getGenesById(state),
+    user: getUser(state),
   }
 }
 

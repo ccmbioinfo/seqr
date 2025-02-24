@@ -8,7 +8,7 @@ import FamilyLayout from 'shared/components/panel/family/FamilyLayout'
 import StateChangeForm from 'shared/components/form/StateChangeForm'
 import { Dropdown, BaseSemanticInput } from 'shared/components/form/Inputs'
 
-import { FAMILY_FIELD_NAME_LOOKUP } from 'shared/utils/constants'
+import { FAMILY_FIELD_NAME_LOOKUP, FAMILY_FIELD_SAVED_VARIANTS } from 'shared/utils/constants'
 
 import {
   getProjectAnalysisGroupFamiliesByGuid, getVisibleFamilies, getFamiliesTableState, getFamiliesTableFilters,
@@ -16,7 +16,7 @@ import {
 } from '../../../selectors'
 import { updateFamiliesTable, updateFamiliesTableFilters } from '../../../reducers'
 import {
-  CATEGORY_FAMILY_FILTERS,
+  PROJECT_CATEGORY_FAMILY_FILTERS,
   CASE_REVIEW_FAMILY_FILTER_OPTIONS,
   FAMILY_SORT_OPTIONS,
   CASE_REVIEW_TABLE_NAME,
@@ -151,7 +151,7 @@ const FamilyTableFilter = connect(mapFilterStateToProps, mapFilterDispatchToProp
 
 const familyFieldDisplay = (field) => {
   const { id } = field
-  return CATEGORY_FAMILY_FILTERS[id] ? <FamilyTableFilter category={id} /> : FAMILY_FIELD_NAME_LOOKUP[id]
+  return PROJECT_CATEGORY_FAMILY_FILTERS[id] ? <FamilyTableFilter category={id} /> : FAMILY_FIELD_NAME_LOOKUP[id]
 }
 
 const TableHeaderRow = React.memo(({
@@ -191,10 +191,9 @@ const TableHeaderRow = React.memo(({
         <OverflowHeaderCell colSpan={2} textAlign="left">
           <FamilyLayout
             compact
-            offset
             fields={fields}
             fieldDisplay={familyFieldDisplay}
-            rightContent={showVariantDetails ? 'Saved Variants' : null}
+            rightContent={showVariantDetails ? <FamilyTableFilter category={FAMILY_FIELD_SAVED_VARIANTS} /> : null}
           />
         </OverflowHeaderCell>
       </Table.Row>

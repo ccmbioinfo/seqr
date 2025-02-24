@@ -2,6 +2,7 @@ import json
 import logging
 
 from settings import DEPLOYMENT_TYPE
+from typing import Optional
 
 class JsonLogFormatter(logging.Formatter):
 
@@ -41,7 +42,7 @@ class JsonLogFormatter(logging.Formatter):
 
 class SeqrLogger(object):
 
-    def __init__(self, name=None):
+    def __init__(self, name: Optional[str] = None) -> None:
         """Custom logger which requires user metadata to be included in the log."""
         self._logger = logging.getLogger(name)
 
@@ -76,7 +77,7 @@ def log_model_bulk_update(logger, models, user, update_type, update_fields=None)
     if not models:
         return []
     db_entity = type(models[0]).__name__
-    entity_ids = [o.guid for o in models]
+    entity_ids = sorted([o.guid for o in models])
     db_update = {
         'dbEntity': db_entity, 'entityIds': entity_ids, 'updateType': 'bulk_{}'.format(update_type),
     }

@@ -1,3 +1,4 @@
+import React from 'react'
 import { connect } from 'react-redux'
 
 import { validators } from 'shared/components/form/FormHelpers'
@@ -8,6 +9,19 @@ import UploadFormPage from 'shared/components/page/UploadFormPage'
 import { getRnaSeqUploadStats } from '../selectors'
 import { uploadRnaSeq } from '../reducers'
 
+const uploadLabelHelp = (
+  <div>
+    RNA-seq data should be formatted according to&nbsp;
+    <a
+      href="https://docs.google.com/document/d/1c-14pa1RAAN8bAVdfvuJwnjoSImnXJU2k44XyM0pc88/edit?usp=sharing"
+      target="_blank"
+      rel="noreferrer"
+    >
+      these guidelines
+    </a>
+    .
+  </div>
+)
 const mapStateToProps = state => ({
   fields: [
     {
@@ -15,12 +29,13 @@ const mapStateToProps = state => ({
       label: 'RNA-seq data',
       placeholder: 'gs:// Google bucket path',
       validate: validators.required,
+      labelHelp: uploadLabelHelp,
     },
     {
       name: 'dataType',
       label: 'Data Type',
       component: Select,
-      options: ['Outlier', 'TPM'].map(text => ({ text, value: text.toLowerCase() })),
+      options: ['Outlier', 'TPM', 'Splice Outlier'].map(text => ({ text, value: text.toLowerCase().replace(' ', '_') })),
       validate: validators.required,
     },
     {

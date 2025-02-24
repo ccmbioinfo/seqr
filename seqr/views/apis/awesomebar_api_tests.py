@@ -7,7 +7,6 @@ from seqr.views.utils.test_utils import AuthenticationTestCase, AnvilAuthenticat
 @mock.patch('seqr.views.utils.permissions_utils.safe_redis_get_json', lambda *args: None)
 class AwesomebarAPITest(object):
 
-    @mock.patch('seqr.views.apis.awesomebar_api.ANALYST_PROJECT_CATEGORY', 'analyst-projects')
     @mock.patch('seqr.views.apis.awesomebar_api.MAX_STRING_LENGTH', 20)
     @mock.patch('seqr.views.apis.awesomebar_api.MAX_RESULTS_PER_CATEGORY', 5)
     def test_awesomebar_autocomplete_handler(self):
@@ -86,15 +85,15 @@ class AwesomebarAPITest(object):
         self.assertEqual(len(genes), 5)
         self.assertListEqual(
             [g['title'] for g in genes],
-            ['ENSG00000186092', 'ENSG00000185097', 'DDX11L1', 'ENSG00000237613', 'ENSG00000240361'],
+            ['ENSG00000135953', 'ENSG00000177000', 'ENSG00000186092', 'ENSG00000185097', 'DDX11L1'],
         )
-        self.assertDictEqual(genes[0], {
+        self.assertDictEqual(genes[2], {
             'key': 'ENSG00000186092',
             'title': 'ENSG00000186092',
             'description': '(OR4F5)',
             'href': '/summary_data/gene_info/ENSG00000186092',
         })
-        self.assertDictEqual(genes[2], {
+        self.assertDictEqual(genes[4], {
             'key': 'ENSG00000223972',
             'title': 'DDX11L1',
             'description': '(ENSG00000223972)',
@@ -126,8 +125,8 @@ class AwesomebarAPITest(object):
         hpo_terms = matches['hpo_terms']['results']
         self.assertEqual(len(hpo_terms), 5)
         self.assertListEqual([h['title'] for h in hpo_terms], [
-            'Tetralogy of Fallot', 'Arrhythmia', 'Complete atrioventricular canal defect',
-            'Defect in the atrial septum', 'Failure to thrive',
+            'Tetralogy of Fallot', 'Arrhythmia',  'Autosomal dominant inheritance', 'Complete atrioventricular canal defect',
+            'Defect in the atrial septum',
         ])
         self.assertDictEqual(hpo_terms[0], {
             'key': 'HP:0001636',
@@ -161,5 +160,5 @@ class AnvilAwesomebarAPITest(AnvilAuthenticationTestCase, AwesomebarAPITest):
             mock.call(self.collaborator_user),
         ]
         self.mock_list_workspaces.assert_has_calls(calls)
-        self.mock_get_ws_acl.assert_not_called()
+        self.assert_no_extra_anvil_calls()
         self.mock_get_ws_access_level.assert_not_called()

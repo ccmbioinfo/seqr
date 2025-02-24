@@ -7,15 +7,25 @@ on:
     branches:
       - master
       - dev
+    paths-ignore:
+      - 'hail_search/**'
+      - 'vlm/**'
+      - '.github/workflows/*hail-search*.yaml'
+      - '.github/workflows/*vlm*.yaml'
   pull_request:
     types: [opened, synchronize, reopened]
+    paths-ignore:
+      - 'hail_search/**'
+      - 'vlm/**'
+      - '.github/workflows/*hail-search*.yaml'
+      - '.github/workflows/*vlm*.yaml'
 
 jobs:
   python:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7]
+        python-version: [3.9]
 
     services:
       # Label used to access the service container

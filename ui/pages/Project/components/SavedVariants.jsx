@@ -6,13 +6,17 @@ import { Grid } from 'semantic-ui-react'
 import styled from 'styled-components'
 
 import { updateVariantTags } from 'redux/rootReducer'
-import { getAnalysisGroupsByGuid } from 'redux/selectors'
+import { getCurrentAnalysisGroupFamilyGuids } from 'redux/selectors'
 import {
   VARIANT_SORT_FIELD,
   VARIANT_HIDE_EXCLUDED_FIELD,
   VARIANT_HIDE_REVIEW_FIELD,
   VARIANT_HIDE_KNOWN_GENE_FOR_PHENOTYPE_FIELD,
   VARIANT_PER_PAGE_FIELD,
+  EXCLUDED_TAG_NAME,
+  REVIEW_TAG_NAME,
+  DISCOVERY_CATEGORY_NAME,
+  SHOW_ALL,
 } from 'shared/utils/constants'
 import UpdateButton from 'shared/components/buttons/UpdateButton'
 import { LargeMultiselect, Dropdown } from 'shared/components/form/Inputs'
@@ -22,7 +26,7 @@ import { TAG_FORM_FIELD } from '../constants'
 import { loadSavedVariants, updateSavedVariantTable } from '../reducers'
 import {
   getCurrentProject, getProjectTagTypeOptions, getTaggedVariantsByFamily, getProjectVariantSavedByOptions,
-  getSavedVariantTagTypeCounts, getSavedVariantTagTypeCountsByFamily,
+  getSavedVariantTagTypeCounts, getSavedVariantTagTypeCountsByFamily, getSavedVariantTableState,
 } from '../selectors'
 import VariantTagTypeBar, { getSavedVariantsLinkPath } from './VariantTagTypeBar'
 import SelectSavedVariantsTable, { TAG_COLUMN, VARIANT_POS_COLUMN, GENES_COLUMN } from './SelectSavedVariantsTable'
@@ -34,8 +38,6 @@ const LabelLink = styled(Link)`
     color: black;
   }
 `
-
-const ALL_FILTER = 'ALL'
 
 const mapSavedByInputStateToProps = state => ({
   options: getProjectVariantSavedByOptions(state),
@@ -58,6 +60,10 @@ const FILTER_FIELDS = [
   },
 ]
 const NON_DISCOVERY_FILTER_FIELDS = FILTER_FIELDS.filter(({ name }) => name !== 'hideKnownGeneForPhenotype')
+
+const EXCLUDED_TAGS = [EXCLUDED_TAG_NAME]
+const REVIEW_TAGS = [REVIEW_TAG_NAME]
+const EXCLUDED_AND_REVIEW_TAGS = [...EXCLUDED_TAGS, ...REVIEW_TAGS]
 
 const mapVariantLinkStateToProps = (state, ownProps) => {
   const familyGuid = ownProps.meta.data.formId
@@ -85,7 +91,19 @@ const LINK_VARIANT_FIELDS = [
       VARIANT_POS_COLUMN,
       TAG_COLUMN,
     ],
-    validate: value => (Object.keys(value || {}).length > 1 ? undefined : 'Multiple variants required'),
+    includeSelectedRowData: true,
+    validate: (value) => {
+      const variants = Object.values(value || {}).filter(v => v)
+      if (variants.length < 2) {
+        return 'Multiple variants required'
+      }
+      if (variants.length === 2 &&
+        Object.keys(variants[0].transcripts).every(geneId => !variants[1].transcripts[geneId])
+      ) {
+        return 'Compound het pairs must be in the same gene'
+      }
+      return undefined
+    },
   },
 ]
 
@@ -124,10 +142,11 @@ class BaseProjectSavedVariants extends React.PureComponent {
   static propTypes = {
     match: PropTypes.object,
     project: PropTypes.object,
-    analysisGroup: PropTypes.object,
+    analysisGroupFamilyGuids: PropTypes.arrayOf(PropTypes.string),
     tagTypeCounts: PropTypes.object,
     updateTableField: PropTypes.func,
     loadProjectSavedVariants: PropTypes.func,
+    categoryFilter: PropTypes.string,
   }
 
   getUpdateTagUrl = (newTag) => {
@@ -139,15 +158,15 @@ class BaseProjectSavedVariants extends React.PureComponent {
     const isCategory = categoryOptions.includes(newTag)
     updateTableField('categoryFilter')(isCategory ? newTag : null)
     return getSavedVariantsLinkPath({
-      project,
+      projectGuid: project.projectGuid,
       analysisGroupGuid: match.params.analysisGroupGuid,
-      tag: !isCategory && newTag !== ALL_FILTER && newTag,
+      tag: !isCategory && newTag !== SHOW_ALL && newTag,
       familyGuid: match.params.familyGuid,
     })
   }
 
   loadVariants = (newParams) => {
-    const { analysisGroup, match, loadProjectSavedVariants, updateTableField } = this.props
+    const { analysisGroupFamilyGuids, match, loadProjectSavedVariants, updateTableField } = this.props
     const { familyGuid, variantGuid, analysisGroupGuid } = match.params
 
     const isInitialLoad = match.params === newParams
@@ -155,7 +174,7 @@ class BaseProjectSavedVariants extends React.PureComponent {
       newParams.analysisGroupGuid !== analysisGroupGuid ||
       newParams.variantGuid !== variantGuid
 
-    const familyGuids = newParams.familyGuid ? [newParams.familyGuid] : (analysisGroup || {}).familyGuids
+    const familyGuids = newParams.familyGuid ? [newParams.familyGuid] : analysisGroupFamilyGuids
 
     updateTableField('page')(1)
     if (isInitialLoad || hasUpdatedFamilies) {
@@ -185,12 +204,14 @@ class BaseProjectSavedVariants extends React.PureComponent {
       })
       return acc
     }, [{
-      value: ALL_FILTER,
+      value: SHOW_ALL,
       text: 'All Saved',
       content: (
         <LabelLink
           to={getSavedVariantsLinkPath({
-            project, analysisGroupGuid: match.params.analysisGroupGuid, familyGuid: match.params.familyGuid,
+            projectGuid: project.projectGuid,
+            analysisGroupGuid: match.params.analysisGroupGuid,
+            familyGuid: match.params.familyGuid,
           })}
         >
           All Saved
@@ -200,17 +221,25 @@ class BaseProjectSavedVariants extends React.PureComponent {
     }])
   }
 
-  tableSummary = (summaryProps) => {
+  tableSummary = ({ hideExcluded, hideReviewOnly }) => {
     const { project, tagTypeCounts, match } = this.props
+    let excludeItems
+    if (hideExcluded) {
+      excludeItems = hideReviewOnly ? EXCLUDED_AND_REVIEW_TAGS : EXCLUDED_TAGS
+    } else if (hideReviewOnly) {
+      excludeItems = REVIEW_TAGS
+    }
     return (
       <Grid.Row>
         <Grid.Column width={16}>
           <VariantTagTypeBar
             height={30}
-            project={project}
+            projectGuid={project.projectGuid}
+            familyGuid={match.params.familyGuid}
             analysisGroupGuid={match.params.analysisGroupGuid}
             tagTypeCounts={tagTypeCounts}
-            {...summaryProps}
+            tagTypes={project.variantTagTypes}
+            excludeItems={excludeItems}
           />
         </Grid.Column>
       </Grid.Row>
@@ -218,14 +247,15 @@ class BaseProjectSavedVariants extends React.PureComponent {
   }
 
   render() {
-    const { project, analysisGroup, loadProjectSavedVariants, ...props } = this.props
-    const { familyGuid } = props.match.params
+    const { project, analysisGroupFamilyGuids, loadProjectSavedVariants, categoryFilter, ...props } = this.props
+    const { familyGuid, tag, variantGuid } = props.match.params
+    const appliedTagCategoryFilter = tag || (variantGuid ? null : (categoryFilter || SHOW_ALL))
 
     return (
       <SavedVariants
         tagOptions={this.tagOptions()}
-        filters={NON_DISCOVERY_FILTER_FIELDS}
-        discoveryFilters={FILTER_FIELDS}
+        filters={appliedTagCategoryFilter === DISCOVERY_CATEGORY_NAME ? FILTER_FIELDS : NON_DISCOVERY_FILTER_FIELDS}
+        selectedTag={appliedTagCategoryFilter}
         additionalFilter={
           (project.canEdit && familyGuid) ? <LinkSavedVariants familyGuid={familyGuid} {...props} /> : null
         }
@@ -242,10 +272,11 @@ class BaseProjectSavedVariants extends React.PureComponent {
 
 const mapStateToProps = (state, ownProps) => ({
   project: getCurrentProject(state),
-  analysisGroup: getAnalysisGroupsByGuid(state)[ownProps.match.params.analysisGroupGuid],
+  analysisGroupFamilyGuids: getCurrentAnalysisGroupFamilyGuids(state, ownProps),
   tagTypeCounts: ownProps.match.params.familyGuid ?
     getSavedVariantTagTypeCountsByFamily(state)[ownProps.match.params.familyGuid] :
     getSavedVariantTagTypeCounts(state, ownProps),
+  categoryFilter: getSavedVariantTableState(state)?.categoryFilter,
 })
 
 const mapDispatchToProps = dispatch => ({

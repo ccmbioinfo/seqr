@@ -2,6 +2,125 @@
 
 ## dev
 
+## 11/21/24
+* Migrate "Submit to Clinvar" to generic report flag for Variant Notes (REQUIRES DB MIGRATION)
+
+## 10/28/24
+* Update RNA Tissue Type choices (REQUIRES DB MIGRATION)
+
+## 9/19/24
+* Update Biosample choices (REQUIRES DB MIGRATION)
+* Add support for Azure OAuth
+
+## 8/14/24
+* Remove ONT support (REQUIRES DB MIGRATION)
+* Add "Validated Name" functional tag (REQUIRES DB MIGRATION)
+
+## 8/9/24
+* Update directory structure for search backend
+
+## 8/2/24
+* Adds index_file_path to IGV Sample model (REQUIRES DB MIGRATION)
+
+## 7/24/24
+* Split RNA Sample models (REQUIRES DB MIGRATION)
+
+## 7/8/24
+* Add VLM contact for Projects (REQUIRES DB MIGRATION)
+
+## 6/11/24
+* Add "Partial Phenotype Contribution" functional tag (REQUIRES DB MIGRATION)
+
+## 5/24/24
+* Adds external_data to Family model (REQUIRES DB MIGRATION)
+* Adds post_discovery_mondo_id to Family model (REQUIRES DB MIGRATION)
+* Adds guid and created fields to PhenotypePrioritization model (REQUIRES DB MIGRATION)
+* Enable "Reports" tab by default for local installations
+
+## 5/8/24
+* Adds dynamic analysis groups (REQUIRES DB MIGRATION)
+
+## 4/4/24
+* Add ability to import project metadata from gregor metadata
+  * Only enabled for a project if tag is first created via 
+    ```
+    ./manage.py add_project_tag --name="GREGoR Finding" --order=0.5 --color=#c25fc4 --project=<project>
+    ```
+* Support FRASER2 data (REQUIRES DB MIGRATION)
+* Add solve_status to Individual model (REQUIRES DB MIGRATION)
+* Update data deployment for hail backend to disk snapshots
+
+## 3/13/24
+* Add "Probably Solved" analysis status (REQUIRES DB MIGRATION)
+
+## 3/1/24
+* Add subscribable project notifications (REQUIRES DB MIGRATION)
+
+## 1/8/24
+* Support OMIM entries with no associated gene and remove phenotypic_series_number (REQUIRES DB MIGRATION)
+
+## 11/21/23
+* Support AIP upload
+  * To add the required tag type, run `./manage.py loaddata new_variant_tag_types`
+
+## 11/13/23
+* Add Partial Solve analysis status in Family model (REQUIRES DB MIGRATION)
+
+## 10/19/23
+* Migrate Family post_discovery_omim_number to integer array (REQUIRES DB MIGRATION)
+* Add GeneShet model to the reference DB (REQUIRES DB MIGRATION)
+
+## 10/6/23
+* Require tissue_type in Sample model (REQUIRES DB MIGRATION)
+
+## 9/22/23
+* Update VARIANTS dataset_type in Sample model (REQUIRES DB MIGRATION)
+
+## 8/22/23
+* Add db indices to optimize RNA data queries (REQUIRES DB MIGRATION)
+
+## 7/11/23
+* Add internal UI to trigger airflow data loading
+* Add RnaSeqSpliceOutlier display
+
+## 6/23/23
+* Add a 'rank' field to the RnaSeqSpliceOutlier model (REQUIRES DB MIGRATION)
+* Remove hail python dependency
+
+## 6/2/23
+* Update Clinvar filtering and display
+
+* Add support for Gencode v39
+  * To add new data, run the `update_gencode_latest`
+
+## 4/26/23
+* Add RnaSeqSpliceOutlier model (REQUIRES DB MIGRATION)
+* Add db index to improve Rna Sample Metadata performance (REQUIRES DB MIGRATION)
+
+## 2/24/23
+* Updated Gregor sample manifest (REQUIRES DB MIGRATION)
+* Bumps python to 3.9
+
+## 2/15/23
+* Support sharded VCFs in AnVIL loading
+
+## 1/11/23
+* Require PHI disclaimer when uploading AnVIL pedigree
+
+## 11/9/22
+* Add PhenotypePrioritization model (REQUIRES DB MIGRATION)
+
+* Add Refseq and MANE transcript info (REQUIRES DB MIGRATION)
+  * To add new data, run the `update_gencode_transcripts` and `update_refseq` commands
+
+## 10/13/22
+* Link MME submissions to saved variants (REQUIRES DB MIGRATION)
+
+## 9/28/22
+* Add Gregor fields to sample manifest (REQUIRES DB MIGRATION)
+* Deprecate auto-granting project access for analysts (removes ANALYST_PROJECT_CATEGORY env variable)
+* Add support for adding user groups for project access
+
 ## 9/6/22
 * Disable mixed authorization for local and AnVIL permissions (REQUIRES DB MIGRATION)
 

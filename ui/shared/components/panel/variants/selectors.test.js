@@ -5,8 +5,10 @@ import {
   getPairedSelectedSavedVariants,
   getVisibleSortedSavedVariants,
   getPairedFilteredSavedVariants,
-  getRnaSeqOutilerDataByFamilyGene,
+  getIndividualGeneDataByFamilyGene,
 } from './selectors'
+
+const NON_PROJECT_PAGE_STATE = { ...STATE_WITH_2_FAMILIES, currentProjectGuid: null }
 
 test('getPairedSelectedSavedVariants', () => {
 
@@ -54,6 +56,24 @@ test('getPairedSelectedSavedVariants', () => {
   )
   expect(savedVariants.length).toEqual(1)
   expect(savedFamilyVariants[0].variantGuid).toEqual('SV0000004_116042722_r0390_1000')
+
+  const tagSavedVariants = getPairedSelectedSavedVariants(
+    STATE_WITH_2_FAMILIES, { match: { params: { tag: 'Review' } } },
+  )
+  expect(tagSavedVariants.length).toEqual(2)
+  expect(tagSavedVariants[0].variantGuid).toEqual('SV0000004_116042722_r0390_1000')
+
+  const summaryDataTagSavedVariants = getPairedSelectedSavedVariants(
+    NON_PROJECT_PAGE_STATE, { match: { params: { tag: 'Review' } } },
+  )
+  expect(summaryDataTagSavedVariants.length).toEqual(2)
+  expect(summaryDataTagSavedVariants[0].variantGuid).toEqual('SV0000004_116042722_r0390_1000')
+
+  const multiTagSavedVariants = getPairedSelectedSavedVariants(
+    NON_PROJECT_PAGE_STATE, { match: { params: { tag: 'Review;Tier 1 - Phenotype not delineated' } } },
+  )
+  expect(multiTagSavedVariants.length).toEqual(1)
+  expect(multiTagSavedVariants[0].variantGuid).toEqual('SV0000002_1248367227_r0390_100')
 })
 
 test('getPairedFilteredSavedVariants', () => {
@@ -73,39 +93,35 @@ test('getVisibleSortedSavedVariants', () => {
   expect(savedVariants[0].variantGuid).toEqual('SV0000002_1248367227_r0390_100')
 })
 
-const RNA_SEQ_STATE = {
-  rnaSeqDataByIndividual: {
-    I021476_na19678_1: {
-      outliers: {
-        ENSG00000228198: { isSignificant: true, pValue: 0.0004 },
-        ENSG00000164458: { isSignificant: true, pValue: 0.0073 },
-      },
-    },
-    I021474_na19679_1: {
-      outliers: {
-        ENSG00000228198: { isSignificant: true, pValue: 0.01 },
-        ENSG00000164458: { isSignificant: false, pValue: 0.73 },
-      },
-    },
-    I021476_na19678_2: { outliers: { ENSG00000228198: { isSignificant: true, pValue: 0.0214 } } },
-  },
-  ...STATE_WITH_2_FAMILIES,
-}
-
-test('getRnaSeqOutilerDataByFamilyGene', () => {
-  expect(getRnaSeqOutilerDataByFamilyGene(RNA_SEQ_STATE)).toEqual({
+test('getIndividualGeneDataByFamilyGene', () => {
+  expect(getIndividualGeneDataByFamilyGene(STATE_WITH_2_FAMILIES)).toEqual({
     F011652_1: {
-      ENSG00000228198: {
-        NA19678: { isSignificant: true, pValue: 0.0004 },
-        NA19679_1: { isSignificant: true, pValue: 0.01 },
+      rnaSeqData: {
+        ENSG00000228198: [
+          { individualName: 'NA19678', isSignificant: true, pValue: 0.0004 },
+          { individualName: 'NA19679_1', isSignificant: true, pValue: 0.01 },
+        ],
+        ENSG00000164458: [
+          { individualName: 'NA19678', isSignificant: true, pValue: 0.0073 },
+        ],
       },
-      ENSG00000164458: {
-        NA19678: { isSignificant: true, pValue: 0.0073 },
+      phenotypeGeneScores: {
+        ENSG00000228198: {
+          lirical: [{
+            individualName: 'NA19678',
+            diseaseId: 'OMIM:618460',
+            diseaseName: 'Khan-Khan-Katsanis syndrome',
+            rowId: 'NA19678-OMIM:618460',
+            rank: 1,
+            scores: { compositeLR: 0.066, post_test_probability: 0 },
+          }],
+        },
       },
     },
     F011652_2: {
-      ENSG00000228198: { NA19678_2: { isSignificant: true, pValue: 0.0214 } },
+      rnaSeqData: {
+        ENSG00000228198: [{ individualName: 'NA19678_2', isSignificant: true, pValue: 0.0214 }],
+      },
     },
   })
 })
-
