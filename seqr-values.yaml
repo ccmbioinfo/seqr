@@ -1,0 +1,53 @@
+seqr:
+  image:
+    repository: git.ccm.sickkids.ca:5555/lmichael/seqr
+    tag: latest
+  imagePullSecrets: [{"name": "regcred"}]
+  environment:
+    GUNICORN_WORKER_THREADS: "8"
+    BASE_URL: "https://seqr-staging.ccm.sickkids.ca/"
+    POSTMARK_SERVER_TOKEN: "PLACE_TOKEN_HERE"
+    MME_API_TOKEN_GENEMATCHER: "PLACE_TOKEN_HERE"
+  volumes: |-
+    - name: seqr-datasets
+      persistentVolumeClaim:
+        readOnly: false
+        claimName: {{ include "lib.pvc-name" . }}
+    - name: seqr-readviz
+      persistentVolumeClaim:
+        readOnly: true
+        claimName: seqr-readviz-pvc
+  volumeMounts: |-
+    - name: seqr-datasets
+      mountPath: /var/seqr
+      readOnly: false
+    - name: seqr-readviz
+      mountPath: /readviz
+      readOnly: true
+  clusterHostname: seqr-staging.ccm.sickkids.ca
+  ingress:
+    enabled: true
+    nameOverride: ingress-nginx
+    className: "nginx"
+    hosts:
+      - host: seqr-staging.ccm.sickkids.ca
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: nginx-seqr-cert
+        hosts:
+          - seqr-staging.ccm.sickkids.ca
+  resources:
+    limits:
+      memory: "8G"
+      cpu: "4"
+  redis:
+    enabled: yes
+    architecture: standalone
+    master:
+      resources:
+        limits:
+          memory: "4G"
+          cpu: "1"
+
