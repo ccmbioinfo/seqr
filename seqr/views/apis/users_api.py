@@ -8,7 +8,7 @@ from guardian.shortcuts import assign_perm, remove_perm
 from urllib.parse import unquote
 
 from seqr.models import UserPolicy, Project, CAN_VIEW, CAN_EDIT
-from seqr.utils.communication_utils import send_welcome_email
+from seqr.utils.communication_utils import send_welcome_email, send_reset_password_email
 from seqr.utils.logging_utils import SeqrLogger
 from seqr.views.utils.json_to_orm_utils import update_model_from_json, get_or_create_model_from_json
 from seqr.views.utils.json_utils import create_json_response
@@ -72,19 +72,7 @@ def forgot_password(request):
         return create_json_response({}, status=400, reason='No account found for this email')
     user = users.first()
 
-    email_content = """
-        Hi there {full_name}--
-
-        Please click this link to reset your seqr password:
-        {base_url}login/set_password/{password_token}?reset=true
-        """.format(
-        full_name=user.get_full_name(),
-        base_url=BASE_URL,
-        password_token=quote(user.password, safe=''),
-    )
-
-    user.email_user('Reset your seqr password', email_content, fail_silently=False)
-
+    send_reset_password_email(user)
     return create_json_response({'success': True})
 
 

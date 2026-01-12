@@ -132,7 +132,7 @@ from seqr.views.apis.summary_data_api import success_story, saved_variants_page,
 from seqr.views.apis.superuser_api import get_all_users
 
 from seqr.views.apis.awesomebar_api import awesomebar_autocomplete_handler
-from seqr.views.apis.auth_api import login_required_error, login_view, logout_view, policies_required_error
+from seqr.views.apis.auth_api import login_required_error, login_view, logout_view, policies_required_error, register_view
 from seqr.views.apis.igv_api import fetch_igv_track, receive_igv_table_handler, update_individual_igv_sample, \
     receive_bulk_igv_table_handler
 from seqr.views.apis.analysis_group_api import update_analysis_group_handler, delete_analysis_group_handler, \
@@ -169,6 +169,7 @@ no_login_react_app_pages = [
     'login/error/.*',
     'login/forgot_password',
     'login/set_password/(?P<user_token>.+)',
+    'register/',
     'matchmaker/matchbox',
     'matchmaker/disclaimer',
     'privacy_policy',
@@ -308,6 +309,7 @@ api_endpoints = {
     'users/(?P<username>[^/]+)/set_password': set_password,
     'users/update': update_user,
     'users/update_policies': update_policies,
+    'register': register_view,
 
     'users/get_options': get_all_collaborator_options,
     'users/get_group_options': get_all_user_group_options,

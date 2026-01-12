@@ -19,6 +19,7 @@ import HpoPanel from '../components/panel/HpoPanel'
 
 export const ANVIL_URL = 'https://anvil.terra.bio'
 export const LOCAL_LOGIN_URL = '/login'
+export const LOCAL_REGISTER_URL = '/register'
 
 export const VCF_DOCUMENTATION_URL = 'https://storage.googleapis.com/seqr-reference-data/seqr-vcf-info.pdf'
 

@@ -48,6 +48,7 @@ django-cors-headers==3.14.0
 django-csp==3.8
     # via -r requirements.in
 django-guardian==3.3.2
+django-extensions==3.2.3
     # via -r requirements.in
 django-hijack==3.7.8
     # via -r requirements.in

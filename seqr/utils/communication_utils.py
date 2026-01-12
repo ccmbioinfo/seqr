@@ -1,8 +1,10 @@
 import logging
+from requests.utils import quote
 from slacker import Slacker
 
 from settings import SLACK_TOKEN, BASE_URL
 from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from notifications.signals import notify
 
@@ -37,7 +39,7 @@ def send_welcome_email(user, referrer):
     {referrer.get_full_name() or referrer.email} has added you as a collaborator in seqr.
 
     Please click this link to set up your account:
-    {BASE_URL}login/set_password/{user.password}
+    {BASE_URL}/login/set_password/{user.password}
 
     Thanks!
     """
@@ -54,6 +56,15 @@ def send_html_email(email_body, process_message=None, **kwargs):
         process_message(email_message)
     email_message.send()
 
+def send_reset_password_email(user):
+    subject = 'seqr: Reset your password'
+    to = user.email
+    email_body = render_to_string('emails/reset_password.html', {
+        'base_url': BASE_URL,
+        'full_name': user.get_full_name(),
+        'password_token': quote(user.password, safe='')
+    })
+    send_html_email(email_body, subject=subject, to=[to])
 
 def send_project_notification(project, notification, subject, email_template=None, slack_channel=None, slack_detail=None):
     url = f'{BASE_URL}project/{project.guid}/project_page'
