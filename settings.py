@@ -172,7 +172,7 @@ LOGGING = {
         'access_log': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '/var/log/django/access.log'
+            'filename': '/access.log'
         },
         'console_json': {
             'level': 'DEBUG',
@@ -182,7 +182,7 @@ LOGGING = {
         'debug_log': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '/var/log/django/debug.log'
+            'filename': '/debug.log'
         },
         'null': {
             'class': 'logging.NullHandler',
@@ -190,7 +190,7 @@ LOGGING = {
         'server_log': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '/var/log/django/server.log'
+            'filename': '/server.log'
         },
     },
     'loggers': {

@@ -12,7 +12,8 @@ COPY ./ui/package-lock.json .
 
 # npm v7 for lockfile v2 compatibility
 RUN npm install -g npm@7.24.2 \
-    && npm ci
+    && npx update-browserslist-db@latest
+RUN npm ci
 
 # Copy the rest of the UI source and build
 COPY ./ui/ .
