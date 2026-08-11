@@ -1,0 +1,150 @@
+global:
+  lib:
+    persistentVolume:
+      local:
+        nodeSelector: seqr-staging-control-plane
+pipeline-runner:
+  cronJobs:
+  - name: reference-data-sync-37
+    schedule: "0 */8 * * *"
+    command: "./loading_pipeline/bin/rsync_reference_data.bash GRCh37 && ./loading_pipeline/bin/download_vep_reference_data.bash GRCh37"
+  - name: reference-data-sync-38
+    schedule: "45 */8 * * *"
+    command: "./loading_pipeline/bin/rsync_reference_data.bash GRCh38 && ./loading_pipeline/bin/download_vep_reference_data.bash GRCh38"
+  environment:
+    PYSPARK_SUBMIT_ARGS: '--driver-memory 12G --executor-memory 12g pyspark-shell'
+    SPARK_SUBMIT_OPTS: '-Xmx13G -Xms12G'
+  pods:
+    - name: api
+      service:
+        type: ClusterIP
+        port: 6000
+      healthCheckRoute: /status
+      command: ["uv", "run", "python3", "-m", "loading_pipeline.api"]
+      initContainers: {}
+      resources:
+        limits:
+          cpu: 4
+          memory: "8G" 
+      sidecar:
+        command: ["uv", "run", "python3", "-m", "loading_pipeline.bin.pipeline_worker"]
+        privileged: true
+        resources:
+          limits:
+            cpu: 8
+            memory: "16G"
+    - name: ui
+      service:
+        type: NodePort
+        port: 8082
+        nodePort: 30951
+      healthCheckRoute: /
+      command: ["uv", "run", "luigid"]
+      initContainers: |-
+        - name: mkdir-luigi-state
+          image: busybox:1.35
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ['/bin/mkdir', '-p', {{ .Values.environment.LUIGI_STATE_DIR }}]
+          {{- with $.Values.volumeMounts }}
+          volumeMounts:
+            {{- tpl . $ | nindent 4 }}
+          {{- end }}
+      resources: {}
+      sidecar: {}
+  hailWorkerResources: |-
+    requests:
+      memory: "12Gi"
+seqr:
+  clusterHostname: seqr-staging.ccm.sickkids.ca
+  environment:
+    BASE_URL: https://seqr-staging.ccm.sickkids.ca/
+    DEPLOYMENT_TYPE: prod
+    GUNICORN_WORKER_THREADS: "8"
+    MME_API_TOKEN_GENEMATCHER: "1"
+  image:
+    repository: git.ccm.sickkids.ca:5555/lmichael/seqr
+    tag: "3.17.0"
+  imagePullSecrets:
+    - name: regcred
+  ingress:
+    className: nginx
+    enabled: true
+    tls:
+      - secretName: ccm-wildcard
+    hosts:
+      - host: seqr-staging.ccm.sickkids.ca
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+          - path: /vlm
+            pathType: ImplementationSpecific
+    nameOverride: ingress-nginx
+  redis:
+    architecture: standalone
+    enabled: true
+    master:
+      resources:
+        limits:
+          cpu: "1"
+          memory: 2G
+  resources:
+    limits:
+      cpu: "2"
+      memory: 6G
+  volumeMounts: |-
+    - name: seqr-datasets
+      mountPath: /var/seqr
+      readOnly: false
+    - name: seqr-readviz
+      mountPath: /readviz
+      readOnly: true
+  volumes: |-
+    - name: seqr-datasets
+      persistentVolumeClaim:
+        readOnly: false
+        claimName: {{ include "lib.pvc-name" . }}
+    - name: seqr-readviz
+      persistentVolumeClaim:
+        readOnly: true
+        claimName: seqr-readviz-pvc 
+  cronJobs:
+  - name: check-new-samples-job
+    schedule: "*/5 * * * *"
+    command: "python manage.py check_for_new_samples_from_pipeline"
+  - name: update-all-reference-data
+    schedule: "0 3 * * *"
+    command: "python manage.py update_all_reference_data"
+  - name: reload-clinvar-all-variants
+    schedule: "30 0 * * *"
+    command: "python /seqr/manage.py check; python /seqr/manage.py reload_clinvar_all_variants"
+    timeout_s: 7200
+  - name: register-caids
+    schedule: "0 6 * * *"
+    command: "python manage.py register_caids"
+  clickhouse:
+    additionalConfigdFiles: |
+      002_max_mem.xml: |
+        <clickhouse>
+          <max_server_memory_usage_to_ram_ratio>0.3</max_server_memory_usage_to_ram_ratio>
+          <merges_mutations_memory_usage_to_ram_ratio>0.2</merges_mutations_memory_usage_to_ram_ratio>
+          <max_server_memory_usage>32000000000</max_server_memory_usage>
+          <concurrent_threads_soft_limit_ratio_to_cores>1</concurrent_threads_soft_limit_ratio_to_cores>
+          <max_block_size>8192</max_block_size>
+          <mark_cache_size>2684354560</mark_cache_size>
+        </clickhouse>
+    livenessProbe:
+      failureThreshold: 6
+      initialDelaySeconds: 120
+      periodSeconds: 30
+    readinessProbe:
+      failureThreshold: 6
+      initialDelaySeconds: 120
+      periodSeconds: 30
+
+vlm:
+  enabled: false
+  environment:
+    VLM_DATA_DIR: '/var/seqr/seqr-hail-search-data'
+    SEQR_BASE_URL: 'https://seqr-staging.ccm.sickkids.ca/'
+    NODE_ID: 'Seqr at SickKids'
+  resources: {}
