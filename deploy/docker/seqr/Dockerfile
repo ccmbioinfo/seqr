@@ -22,7 +22,7 @@ RUN npm run build
 ############################
 # Python build stage
 ############################
-FROM python:3.11-slim-bullseye AS build
+FROM python:3.11-slim-bookworm AS build
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -51,7 +51,7 @@ RUN pip install --no-cache-dir wheel \
 ############################
 # Runtime stage
 ############################
-FROM python:3.11-slim-bullseye AS runtime
+FROM python:3.11-slim-bookworm AS runtime
 LABEL org.opencontainers.image.source="https://github.com/ccmbioinfo/seqr"
 LABEL org.opencontainers.image.authors="Centre for Computational Medicine, Hospital for Sick Children"
 LABEL org.opencontainers.image.title="seqr-ccm"
@@ -85,8 +85,8 @@ RUN curl -sSL https://sdk.cloud.google.com | bash
 ENV PATH="/root/google-cloud-sdk/bin:$PATH"
 
 # Install clickhouse-client
-RUN curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
-RUN echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=$(dpkg --print-architecture)] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list
+RUN curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=$(dpkg --print-architecture)] https://packages.clickhouse.com/deb stable main" | tee /etc/apt/sources.list.d/clickhouse.list
 RUN apt-get update && apt-get install -y clickhouse-client && apt-get clean
 
 WORKDIR /seqr
